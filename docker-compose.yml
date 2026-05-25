@@ -1,0 +1,137 @@
+# =============================================================================
+# Docker Compose — Local-First P2P Git Hosting Platform
+# =============================================================================
+# Three-container architecture communicating via Unix domain sockets:
+#   1. libp2p-node  — Go libp2p networking daemon (host network for peer discovery)
+#   2. git-server   — Rust git backend (network: none for security isolation)
+#   3. api-server   — Go + Fiber HTTP API (internal bridge network only)
+# =============================================================================
+
+version: "3.9"
+
+services:
+  # ---------------------------------------------------------------------------
+  # libp2p-node — Peer-to-peer networking daemon
+  # ---------------------------------------------------------------------------
+  # Runs on the host network so it can participate in mDNS peer discovery and
+  # accept inbound libp2p connections without NAT issues. Communicates with
+  # api-server and git-server exclusively through Unix domain sockets.
+  # ---------------------------------------------------------------------------
+  libp2p-node:
+    build:
+      context: ./services/libp2p-node
+      dockerfile: Dockerfile
+    container_name: p2p-git-libp2p
+    network_mode: host
+    restart: unless-stopped
+    environment:
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - PEER_KEY_PATH=/identity/peer.key
+      - P2P_LISTEN_PORT=${P2P_LISTEN_PORT:-4001}
+      - MDNS_ENABLED=${MDNS_ENABLED:-true}
+    volumes:
+      - peer-identity:/identity:ro
+      - p2p-socket:/run/p2p
+      - git-socket:/run/git
+    healthcheck:
+      test: ["CMD", "test", "-S", "/run/p2p/libp2p.sock"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  # ---------------------------------------------------------------------------
+  # git-server — Rust-based git backend
+  # ---------------------------------------------------------------------------
+  # Completely isolated from the network (network: none). It can ONLY be
+  # reached through the Unix domain socket shared via the git-socket volume.
+  # This is the core security boundary — even if the API is compromised, the
+  # git data cannot be exfiltrated over the network directly.
+  # ---------------------------------------------------------------------------
+  git-server:
+    build:
+      context: ./services/git-server
+      dockerfile: Dockerfile
+    container_name: p2p-git-server
+    network_mode: "none"
+    restart: unless-stopped
+    environment:
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - REPOS_PATH=/repos
+      - GIT_SOCKET_PATH=/run/git/git.sock
+    volumes:
+      - git-socket:/run/git
+      - ${HOST_REPOS_PATH:-./data/repos}:/repos
+    healthcheck:
+      test: ["CMD", "test", "-S", "/run/git/git.sock"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # ---------------------------------------------------------------------------
+  # api-server — Go + Fiber HTTP API
+  # ---------------------------------------------------------------------------
+  # Connected to the internal bridge network only. Serves the REST/WebSocket
+  # API to the local web UI. Communicates with libp2p-node and git-server
+  # through their respective Unix domain sockets — never over TCP.
+  # ---------------------------------------------------------------------------
+  api-server:
+    build:
+      context: ./services/api-server
+      dockerfile: Dockerfile
+    container_name: p2p-git-api
+    networks:
+      - internal-bridge
+    ports:
+      - "${API_PORT:-3000}:3000"
+    restart: unless-stopped
+    environment:
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - API_PORT=3000
+      - GIT_SOCKET_PATH=/run/git/git.sock
+      - P2P_SOCKET_PATH=/run/p2p/libp2p.sock
+      - DB_PATH=/data/api.db
+    volumes:
+      - p2p-socket:/run/p2p
+      - git-socket:/run/git
+      - ${HOST_DB_PATH:-./data/db}:/data
+    depends_on:
+      libp2p-node:
+        condition: service_healthy
+      git-server:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+# =============================================================================
+# Volumes — Shared Unix domain socket channels & persistent identity
+# =============================================================================
+volumes:
+  # Stores the libp2p peer identity key (ed25519). Persisted across restarts
+  # so the node keeps its PeerID.
+  peer-identity:
+    driver: local
+
+  # Unix domain socket for git-server ↔ api-server / libp2p-node IPC
+  git-socket:
+    driver: local
+
+  # Unix domain socket for libp2p-node ↔ api-server IPC
+  p2p-socket:
+    driver: local
+
+# =============================================================================
+# Networks
+# =============================================================================
+networks:
+  # Internal bridge network — only the api-server is attached. Provides the
+  # port-mapped HTTP endpoint while keeping libp2p-node and git-server off
+  # any Docker-managed network.
+  internal-bridge:
+    driver: bridge
+    internal: false

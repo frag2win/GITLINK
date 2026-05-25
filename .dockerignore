@@ -1,0 +1,48 @@
+# =============================================================================
+# .dockerignore — Reduce Docker build context size
+# =============================================================================
+
+# Version control
+.git
+.gitignore
+
+# Documentation
+docs/
+*.md
+LICENSE
+
+# Environment & secrets
+.env
+.env.*
+
+# Node.js
+node_modules/
+ui/node_modules/
+ui/dist/
+
+# Rust build artifacts
+**/target/
+
+# Go binaries
+bin/
+
+# IDE / Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Project data
+data/
+repos/
+
+# Scripts (not needed in container images)
+scripts/
+
+# Docker files (avoid recursive context)
+docker-compose*.yml
+Dockerfile
