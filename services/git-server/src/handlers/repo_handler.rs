@@ -1,80 +1,87 @@
 //! # Repository Handler
 //!
-//! Handles repository CRUD requests received over the Unix domain socket:
-//! - `InitRepo` — Create a new bare repository.
-//! - `ListRepos` — List all repositories.
-//! - `DeleteRepo` — Remove a repository.
+//! Handles repository CRUD requests over the Protobuf socket.
 
 use std::path::Path;
-
-use anyhow::{Context, Result};
 use tracing::instrument;
-
 use crate::config::Config;
-use crate::socket::protocol::{GitOperation, RepoRequest, RepoResponse};
+use crate::socket::protocol::*;
+use crate::socket::protocol::git_command_response::Result as ResponseResult;
 
-/// Dispatch a repository CRUD request to the appropriate Git operation.
-///
-/// # Supported Operations
-/// - [`GitOperation::InitRepo`] — requires `repo_name`.
-/// - [`GitOperation::ListRepos`] — no additional params.
-/// - [`GitOperation::DeleteRepo`] — requires `repo_name`.
 #[instrument(skip(config))]
-pub async fn handle(request: &RepoRequest, config: &Config) -> Result<RepoResponse> {
+pub async fn handle_create(req: CreateRepoRequest, config: &Config) -> GitCommandResponse {
     let repos_dir = Path::new(&config.repos_path);
-
-    match request.operation {
-        GitOperation::InitRepo => handle_init(request, repos_dir),
-        GitOperation::ListRepos => handle_list(request, repos_dir),
-        GitOperation::DeleteRepo => handle_delete(request, repos_dir),
-        _ => Ok(RepoResponse::err(
-            request.request_id.clone(),
-            format!("unsupported operation for repo_handler: {:?}", request.operation),
-        )),
+    
+    match crate::git::repository::init_bare(repos_dir, &req.name) {
+        Ok(repo_info) => {
+            let info = RepoInfo {
+                name: repo_info.name,
+                path: repo_info.path,
+                is_bare: repo_info.is_bare,
+                default_branch: repo_info.default_branch.unwrap_or_default(),
+                last_commit_at: repo_info.last_commit_at.unwrap_or_default(),
+                branch_count: repo_info.branch_count as i32,
+                tag_count: repo_info.tag_count as i32,
+            };
+            
+            GitCommandResponse {
+                success: true,
+                error_message: String::new(),
+                result: Some(ResponseResult::CreateRepo(CreateRepoResponse { repo: Some(info) })),
+            }
+        }
+        Err(e) => GitCommandResponse {
+            success: false,
+            error_message: e.to_string(),
+            result: None,
+        }
     }
 }
 
-/// Handle `InitRepo`: create a new bare repository.
-fn handle_init(request: &RepoRequest, repos_dir: &Path) -> Result<RepoResponse> {
-    let repo_name = request
-        .repo_name
-        .as_deref()
-        .context("repo_name is required for InitRepo")?;
-
-    let repo_info = crate::git::repository::init_bare(repos_dir, repo_name)
-        .map_err(|e| anyhow::anyhow!("{e}"))?;
-
-    let data = serde_json::to_value(&repo_info)
-        .context("failed to serialize RepoInfo")?;
-
-    Ok(RepoResponse::ok(request.request_id.clone(), data))
+#[instrument(skip(config))]
+pub async fn handle_delete(req: DeleteRepoRequest, config: &Config) -> GitCommandResponse {
+    let repos_dir = Path::new(&config.repos_path);
+    
+    match crate::git::repository::delete_repo(repos_dir, &req.name) {
+        Ok(_) => GitCommandResponse {
+            success: true,
+            error_message: String::new(),
+            result: Some(ResponseResult::DeleteRepo(DeleteRepoResponse {})),
+        },
+        Err(e) => GitCommandResponse {
+            success: false,
+            error_message: e.to_string(),
+            result: None,
+        }
+    }
 }
 
-/// Handle `ListRepos`: enumerate all repositories.
-fn handle_list(request: &RepoRequest, repos_dir: &Path) -> Result<RepoResponse> {
-    let repos = crate::git::repository::list_repos(repos_dir)
-        .map_err(|e| anyhow::anyhow!("{e}"))?;
-
-    let data = serde_json::to_value(&repos)
-        .context("failed to serialize repo list")?;
-
-    Ok(RepoResponse::ok(request.request_id.clone(), data))
-}
-
-/// Handle `DeleteRepo`: remove a repository from disk.
-fn handle_delete(request: &RepoRequest, repos_dir: &Path) -> Result<RepoResponse> {
-    let repo_name = request
-        .repo_name
-        .as_deref()
-        .context("repo_name is required for DeleteRepo")?;
-
-    crate::git::repository::delete_repo(repos_dir, repo_name)
-        .map_err(|e| anyhow::anyhow!("{e}"))?;
-
-    let data = serde_json::json!({
-        "deleted": true,
-        "name": repo_name,
-    });
-
-    Ok(RepoResponse::ok(request.request_id.clone(), data))
+#[instrument(skip(config))]
+pub async fn handle_list(_req: ListReposRequest, config: &Config) -> GitCommandResponse {
+    let repos_dir = Path::new(&config.repos_path);
+    
+    match crate::git::repository::list_repos(repos_dir) {
+        Ok(repos) => {
+            let proto_repos = repos.into_iter().map(|r| RepoInfo {
+                name: r.name,
+                path: r.path,
+                is_bare: r.is_bare,
+                default_branch: r.default_branch.unwrap_or_default(),
+                last_commit_at: r.last_commit_at.unwrap_or_default(),
+                branch_count: r.branch_count as i32,
+                tag_count: r.tag_count as i32,
+            }).collect();
+            
+            GitCommandResponse {
+                success: true,
+                error_message: String::new(),
+                result: Some(ResponseResult::ListRepos(ListReposResponse { repos: proto_repos })),
+            }
+        }
+        Err(e) => GitCommandResponse {
+            success: false,
+            error_message: e.to_string(),
+            result: None,
+        }
+    }
 }

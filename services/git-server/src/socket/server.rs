@@ -1,31 +1,24 @@
 //! # Socket Server
 //!
-//! Unix domain socket server that accepts connections, reads JSON-delimited
-//! messages ([`RepoRequest`]), dispatches them to the appropriate handler,
-//! and writes back [`RepoResponse`] messages.
+//! Unix domain socket server that accepts connections, reads length-delimited
+//! protobuf messages ([`GitCommandRequest`]), dispatches them to the appropriate handler,
+//! and writes back [`GitCommandResponse`] messages.
 //!
 //! The server runs on Tokio and spawns a task per connection.
 
 use std::path::Path;
 
 use anyhow::{Context, Result};
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+use futures::{SinkExt, StreamExt};
+use prost::Message;
 use tokio::net::UnixListener;
+use tokio_util::codec::{Framed, LengthDelimitedCodec};
 use tracing::{debug, error, info, instrument, warn};
 
 use crate::config::Config;
-use crate::socket::protocol::{GitOperation, RepoRequest, RepoResponse};
-
-/// Maximum allowed message size in bytes (1 MiB).
-const MAX_MESSAGE_SIZE: usize = 1024 * 1024;
+use crate::socket::protocol::{GitCommandRequest, GitCommandResponse, RequestCommand};
 
 /// Start the Unix domain socket server.
-///
-/// Binds to `config.socket_path`, then loops accepting connections.
-/// Each connection is handled in a separate Tokio task.
-///
-/// # Errors
-/// Returns an error if the socket cannot be bound.
 pub async fn start(config: Config) -> Result<()> {
     let socket_path = Path::new(&config.socket_path);
 
@@ -46,7 +39,7 @@ pub async fn start(config: Config) -> Result<()> {
     let listener = UnixListener::bind(socket_path)
         .context("failed to bind Unix domain socket")?;
 
-    info!(path = %config.socket_path, "Socket server listening");
+    info!(path = %config.socket_path, "Socket server listening (Protobuf)");
 
     loop {
         match listener.accept().await {
@@ -65,110 +58,77 @@ pub async fn start(config: Config) -> Result<()> {
     }
 }
 
-/// Handle a single client connection.
-///
-/// Reads newline-delimited JSON messages, dispatches each to the appropriate
-/// handler, and writes back the JSON response.
+/// Handle a single client connection with length-delimited Protobuf messages.
 #[instrument(skip_all)]
 async fn handle_connection(stream: tokio::net::UnixStream, config: Config) -> Result<()> {
-    let (reader, mut writer) = stream.into_split();
-    let mut buf_reader = BufReader::new(reader);
-    let mut line = String::new();
+    // Use tokio_util LengthDelimitedCodec for framing the binary protobuf payloads
+    let mut framed = Framed::new(stream, LengthDelimitedCodec::new());
 
-    loop {
-        line.clear();
-        let bytes_read = buf_reader
-            .read_line(&mut line)
-            .await
-            .context("failed to read from socket")?;
-
-        if bytes_read == 0 {
-            debug!("Client disconnected");
-            break;
-        }
-
-        if line.len() > MAX_MESSAGE_SIZE {
-            let resp = RepoResponse::err(
-                String::new(),
-                format!("message too large: {} bytes", line.len()),
-            );
-            write_response(&mut writer, &resp).await?;
-            continue;
-        }
-
-        let request: RepoRequest = match serde_json::from_str(line.trim()) {
+    while let Some(result) = framed.next().await {
+        let bytes = result.context("failed to read frame from socket")?;
+        
+        let request = match GitCommandRequest::decode(bytes) {
             Ok(req) => req,
             Err(e) => {
-                warn!(error = %e, "Invalid request JSON");
-                let resp = RepoResponse::err(String::new(), format!("invalid JSON: {e}"));
-                write_response(&mut writer, &resp).await?;
+                warn!(error = %e, "Failed to decode protobuf message");
+                let resp = GitCommandResponse {
+                    success: false,
+                    error_message: format!("protobuf decode error: {e}"),
+                    result: None,
+                };
+                write_response(&mut framed, &resp).await?;
                 continue;
             }
         };
 
-        debug!(
-            request_id = %request.request_id,
-            operation = ?request.operation,
-            "Processing request"
-        );
-
-        let response = dispatch_request(&request, &config).await;
-        write_response(&mut writer, &response).await?;
+        debug!("Processing protobuf request");
+        let response = dispatch_request(request, &config).await;
+        write_response(&mut framed, &response).await?;
     }
 
+    debug!("Client disconnected");
     Ok(())
 }
 
-/// Dispatch a request to the correct handler based on the operation.
-async fn dispatch_request(request: &RepoRequest, config: &Config) -> RepoResponse {
-    let result = match request.operation {
-        // Repository CRUD
-        GitOperation::InitRepo
-        | GitOperation::DeleteRepo
-        | GitOperation::ListRepos => {
-            crate::handlers::repo_handler::handle(request, config).await
-        }
-
-        // Git data operations
-        GitOperation::Clone
-        | GitOperation::Push
-        | GitOperation::Pull
-        | GitOperation::ListRefs
-        | GitOperation::GetObject
-        | GitOperation::ListBranches
-        | GitOperation::CreateBranch
-        | GitOperation::DeleteBranch
-        | GitOperation::ListTags
-        | GitOperation::ListCommits
-        | GitOperation::GetCommitDetail
-        | GitOperation::GetDiff => {
-            crate::handlers::git_handler::handle(request, config).await
-        }
-
-        // File browsing
-        GitOperation::BrowseTree
-        | GitOperation::ReadFile => {
-            crate::handlers::browse_handler::handle(request, config).await
-        }
+/// Dispatch a request to the correct handler based on the command type.
+async fn dispatch_request(request: GitCommandRequest, config: &Config) -> GitCommandResponse {
+    let command = match request.command {
+        Some(c) => c,
+        None => return GitCommandResponse {
+            success: false,
+            error_message: "Missing command in request".to_string(),
+            result: None,
+        },
     };
 
-    match result {
-        Ok(resp) => resp,
-        Err(e) => RepoResponse::err(request.request_id.clone(), format!("{e:#}")),
-    }
+    let result = match command {
+        // Repo CRUD
+        RequestCommand::CreateRepo(req) => crate::handlers::repo_handler::handle_create(req, config).await,
+        RequestCommand::DeleteRepo(req) => crate::handlers::repo_handler::handle_delete(req, config).await,
+        RequestCommand::ListRepos(req) => crate::handlers::repo_handler::handle_list(req, config).await,
+
+        // Git data
+        RequestCommand::Push(req) => crate::handlers::git_handler::handle_push(req, config).await,
+        RequestCommand::Pull(req) => crate::handlers::git_handler::handle_pull(req, config).await,
+        RequestCommand::ListCommits(req) => crate::handlers::git_handler::handle_list_commits(req, config).await,
+        RequestCommand::GetCommit(req) => crate::handlers::git_handler::handle_get_commit(req, config).await,
+        RequestCommand::GetDiff(req) => crate::handlers::git_handler::handle_get_diff(req, config).await,
+
+        // Browse
+        RequestCommand::GetFile(req) => crate::handlers::browse_handler::handle_get_file(req, config).await,
+        RequestCommand::GetTree(req) => crate::handlers::browse_handler::handle_get_tree(req, config).await,
+    };
+
+    result
 }
 
-/// Serialize and write a response as a newline-delimited JSON message.
+/// Serialize and write a response back to the framed stream.
 async fn write_response(
-    writer: &mut tokio::net::unix::OwnedWriteHalf,
-    response: &RepoResponse,
+    framed: &mut Framed<tokio::net::UnixStream, LengthDelimitedCodec>,
+    response: &GitCommandResponse,
 ) -> Result<()> {
-    let mut json = serde_json::to_string(response)
-        .context("failed to serialize response")?;
-    json.push('\n');
-    writer
-        .write_all(json.as_bytes())
-        .await
-        .context("failed to write response to socket")?;
+    let mut resp_bytes = bytes::BytesMut::new();
+    response.encode(&mut resp_bytes).context("failed to encode response")?;
+    framed.send(resp_bytes.freeze()).await.context("failed to write response to socket")?;
     Ok(())
 }

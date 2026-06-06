@@ -22,6 +22,9 @@ pub enum GitError {
     /// A repository already exists at the given path.
     RepoAlreadyExists { path: String },
 
+    /// The repository name is invalid (e.g., path traversal).
+    InvalidRepoName(String),
+
     /// A reference (branch, tag) was not found.
     RefNotFound { name: String },
 
@@ -40,6 +43,7 @@ impl fmt::Display for GitError {
         match self {
             Self::RepoNotFound { path } => write!(f, "repository not found: {path}"),
             Self::RepoAlreadyExists { path } => write!(f, "repository already exists: {path}"),
+            Self::InvalidRepoName(msg) => write!(f, "invalid repository name: {msg}"),
             Self::RefNotFound { name } => write!(f, "reference not found: {name}"),
             Self::ObjectNotFound { oid } => write!(f, "object not found: {oid}"),
             Self::Libgit2(e) => write!(f, "libgit2 error: {e}"),

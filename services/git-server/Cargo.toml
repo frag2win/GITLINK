@@ -22,3 +22,12 @@ anyhow = "1"
 # Structured logging
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+
+# Protobuf support
+prost = "0.12"
+bytes = "1.5"
+tokio-util = { version = "0.7", features = ["codec"] }
+futures = "0.3"
+
+[build-dependencies]
+prost-build = "0.12"
