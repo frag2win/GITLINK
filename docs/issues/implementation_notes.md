@@ -12,6 +12,3 @@ This document records any bugs encountered, workarounds used, and parts of the a
 - **Issue:** The `services/git-server/src/git/sanitize.rs` required throwing an error for invalid repository names, but the `GitError` enum in `services/git-server/src/error.rs` did not include a specific variant for this.
 - **Resolution/Status:** Added `InvalidRepoName(String)` to `GitError` manually during the implementation of `sanitize.rs` to allow for clean, typed error handling instead of falling back to a generic `Other` variant.
 
-## 3. Go API and React UI
-- **Issue:** The boilerplate files for the Go API server and React UI were created as empty or near-empty stub files (26 bytes long).
-- **Resolution/Status:** Currently pending. These files will be entirely overwritten with their proper implementations when we reach those specific phases.
