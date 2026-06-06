@@ -12,6 +12,7 @@ use anyhow::{Context, Result};
 use futures::{SinkExt, StreamExt};
 use prost::Message;
 use tokio::net::UnixListener;
+use std::os::unix::fs::PermissionsExt;
 use tokio_util::codec::{Framed, LengthDelimitedCodec};
 use tracing::{debug, error, info, instrument, warn};
 
@@ -38,6 +39,10 @@ pub async fn start(config: Config) -> Result<()> {
 
     let listener = UnixListener::bind(socket_path)
         .context("failed to bind Unix domain socket")?;
+
+    // Set socket permissions to 777 so api-server (running as appuser) can access it
+    std::fs::set_permissions(socket_path, std::os::unix::fs::PermissionsExt::from_mode(0o777))
+        .context("failed to set socket permissions")?;
 
     info!(path = %config.socket_path, "Socket server listening (Protobuf)");
 
@@ -117,6 +122,11 @@ async fn dispatch_request(request: GitCommandRequest, config: &Config) -> GitCom
         // Browse
         RequestCommand::GetFile(req) => crate::handlers::browse_handler::handle_get_file(req, config).await,
         RequestCommand::GetTree(req) => crate::handlers::browse_handler::handle_get_tree(req, config).await,
+
+        // Smart HTTP Bridge
+        RequestCommand::InfoRefs(req) => crate::handlers::http_handler::handle_info_refs(req, config).await,
+        RequestCommand::UploadPack(req) => crate::handlers::http_handler::handle_upload_pack(req, config).await,
+        RequestCommand::ReceivePack(req) => crate::handlers::http_handler::handle_receive_pack(req, config).await,
     };
 
     result

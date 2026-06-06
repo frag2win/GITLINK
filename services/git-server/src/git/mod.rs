@@ -10,7 +10,9 @@
 //! - [`pack`] — Pack file handling for push/pull operations.
 
 pub mod commits;
+pub mod http;
 pub mod objects;
 pub mod pack;
 pub mod refs;
 pub mod repository;
+pub mod sanitize;

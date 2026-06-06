@@ -20,6 +20,9 @@ message GitCommandRequest {
     GetDiffRequest get_diff = 8;
     GetFileRequest get_file = 9;
     GetTreeRequest get_tree = 10;
+    InfoRefsRequest info_refs = 11;
+    UploadPackRequest upload_pack = 12;
+    ReceivePackRequest receive_pack = 13;
   }
 }
 
@@ -38,6 +41,9 @@ message GitCommandResponse {
     GetDiffResponse get_diff = 10;
     GetFileResponse get_file = 11;
     GetTreeResponse get_tree = 12;
+    InfoRefsResponse info_refs = 13;
+    UploadPackResponse upload_pack = 14;
+    ReceivePackResponse receive_pack = 15;
   }
 }
 
@@ -172,4 +178,35 @@ message GetFileResponse {
   bytes content = 1;
   int64 size = 2;
   bool is_binary = 3;
+}
+
+// ---------------------------------------------------------------------------
+// Git Smart HTTP Bridge
+// ---------------------------------------------------------------------------
+
+message InfoRefsRequest {
+  string repo_name = 1;
+  string service = 2;
+}
+
+message InfoRefsResponse {
+  bytes output = 1;
+}
+
+message UploadPackRequest {
+  string repo_name = 1;
+  bytes body = 2;
+}
+
+message UploadPackResponse {
+  bytes output = 1;
+}
+
+message ReceivePackRequest {
+  string repo_name = 1;
+  bytes body = 2;
+}
+
+message ReceivePackResponse {
+  bytes output = 1;
 }

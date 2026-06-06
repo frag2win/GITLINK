@@ -16,8 +16,13 @@ func Setup(app *fiber.App, db *database.DB, cfg *config.Config) {
 	// ---- API v1 route group ----
 	api := app.Group("/api/v1")
 
+	app.Get("/health", func(c *fiber.Ctx) error {
+		return c.SendString("OK")
+	})
+
 	// Auth routes (public)
 	api.Post("/auth", handlers.Authenticate)
+	api.Post("/contributors", handlers.CreateGlobalContributor)
 
 	// Protected routes — require valid peer identity
 	protected := api.Group("", middleware.Auth())
@@ -52,6 +57,11 @@ func Setup(app *fiber.App, db *database.DB, cfg *config.Config) {
 		Index:    "index.html",
 		Compress: true,
 	})
+
+	// Git Smart HTTP fallback routes
+	app.Get("/:repo/info/refs", handlers.InfoRefs)
+	app.Post("/:repo/git-upload-pack", handlers.UploadPack)
+	app.Post("/:repo/git-receive-pack", handlers.ReceivePack)
 
 	// SPA fallback — serve index.html for any unmatched routes
 	app.Get("/*", func(c *fiber.Ctx) error {

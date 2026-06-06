@@ -36,6 +36,12 @@ pub enum GitError {
 
     /// Catch-all for other Git errors.
     Other(String),
+
+    /// I/O error during Git operations (e.g. streaming packs).
+    IoError(std::io::Error),
+
+    /// A shell Git command failed.
+    GitCommandFailed(String),
 }
 
 impl fmt::Display for GitError {
@@ -48,6 +54,8 @@ impl fmt::Display for GitError {
             Self::ObjectNotFound { oid } => write!(f, "object not found: {oid}"),
             Self::Libgit2(e) => write!(f, "libgit2 error: {e}"),
             Self::Other(msg) => write!(f, "git error: {msg}"),
+            Self::IoError(e) => write!(f, "I/O error: {e}"),
+            Self::GitCommandFailed(msg) => write!(f, "git command failed: {msg}"),
         }
     }
 }

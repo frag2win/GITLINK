@@ -228,3 +228,63 @@ func (c *GitClient) GetFile(
     }
     return resp.GetGetFile().GetContent(), nil
 }
+
+// InfoRefs handles the Git Smart HTTP info/refs discovery phase
+func (c *GitClient) InfoRefs(ctx context.Context, repo, service string) ([]byte, error) {
+    req := &pb.GitCommandRequest{
+        Command: &pb.GitCommandRequest_InfoRefs{
+            InfoRefs: &pb.InfoRefsRequest{
+                RepoName: repo,
+                Service:  service,
+            },
+        },
+    }
+    resp, err := c.send(ctx, req)
+    if err != nil {
+        return nil, err
+    }
+    if !resp.GetSuccess() {
+        return nil, fmt.Errorf("git_client: info refs: %s", resp.GetErrorMessage())
+    }
+    return resp.GetInfoRefs().GetOutput(), nil
+}
+
+// UploadPack handles the git-upload-pack command for fetching/cloning
+func (c *GitClient) UploadPack(ctx context.Context, repo string, body []byte) ([]byte, error) {
+    req := &pb.GitCommandRequest{
+        Command: &pb.GitCommandRequest_UploadPack{
+            UploadPack: &pb.UploadPackRequest{
+                RepoName: repo,
+                Body:     body,
+            },
+        },
+    }
+    resp, err := c.send(ctx, req)
+    if err != nil {
+        return nil, err
+    }
+    if !resp.GetSuccess() {
+        return nil, fmt.Errorf("git_client: upload pack: %s", resp.GetErrorMessage())
+    }
+    return resp.GetUploadPack().GetOutput(), nil
+}
+
+// ReceivePack handles the git-receive-pack command for pushing
+func (c *GitClient) ReceivePack(ctx context.Context, repo string, body []byte) ([]byte, error) {
+    req := &pb.GitCommandRequest{
+        Command: &pb.GitCommandRequest_ReceivePack{
+            ReceivePack: &pb.ReceivePackRequest{
+                RepoName: repo,
+                Body:     body,
+            },
+        },
+    }
+    resp, err := c.send(ctx, req)
+    if err != nil {
+        return nil, err
+    }
+    if !resp.GetSuccess() {
+        return nil, fmt.Errorf("git_client: receive pack: %s", resp.GetErrorMessage())
+    }
+    return resp.GetReceivePack().GetOutput(), nil
+}

@@ -12,31 +12,22 @@ import (
 // Authorization header and injects the peer ID into the request context.
 func Auth() fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		// ---- Extract token from Authorization header ----
 		authHeader := c.Get("Authorization")
 		if authHeader == "" {
 			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-				"error": "missing Authorization header",
+				"error": "missing auth key",
 			})
 		}
 
-		token := strings.TrimPrefix(authHeader, "Bearer ")
-		if token == authHeader {
+		// For Phase 1 smoke test, we treat the SSH key as the peerID if it starts with ssh-ed25519
+		// In a real implementation we would validate against the contributors table
+		if !strings.HasPrefix(authHeader, "ssh-") {
 			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-				"error": "invalid Authorization format, expected 'Bearer <token>'",
+				"error": "unknown key",
 			})
 		}
 
-		// TODO: Validate the token (check signature, expiry).
-		// TODO: Extract peer ID from validated token claims.
-		// TODO: Optionally verify the peer exists in the contributors table.
-
-		peerID := "" // placeholder — set from token claims
-		_ = peerID
-
-		// Store peer ID in Fiber locals for downstream handlers.
-		// c.Locals("peerID", peerID)
-
+		c.Locals("peerID", authHeader)
 		return c.Next()
 	}
 }

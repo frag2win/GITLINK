@@ -58,10 +58,14 @@ pub async fn handle_get_tree(req: GetTreeRequest, config: &Config) -> GitCommand
         Ok(entries) => {
             let proto_entries = entries.into_iter().map(|e| TreeEntry {
                 name: e.name,
-                path: e.path,
-                r#type: if e.is_dir { "tree".to_string() } else { "blob".to_string() },
+                path: "".to_string(),
+                r#type: match e.object_type {
+                    crate::models::TreeEntryKind::Blob => "blob".to_string(),
+                    crate::models::TreeEntryKind::Tree => "tree".to_string(),
+                    crate::models::TreeEntryKind::Commit => "commit".to_string(),
+                },
                 oid: e.oid,
-                size: 0, // Need size if it's a blob
+                size: e.size.unwrap_or(0) as i64,
             }).collect();
 
             GitCommandResponse {

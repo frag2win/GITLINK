@@ -11,6 +11,16 @@ version: "3.9"
 
 services:
   # ---------------------------------------------------------------------------
+  # init-permissions — Fix volume permissions for non-root containers
+  # ---------------------------------------------------------------------------
+  init-permissions:
+    image: busybox
+    volumes:
+      - git-socket:/run/git
+      - p2p-socket:/run/p2p
+    command: sh -c "chown -R 1002:1002 /run/git && chown -R 1001:1001 /run/p2p"
+
+  # ---------------------------------------------------------------------------
   # libp2p-node — Peer-to-peer networking daemon
   # ---------------------------------------------------------------------------
   # Runs on the host network so it can participate in mDNS peer discovery and
@@ -33,6 +43,9 @@ services:
       - peer-identity:/identity:ro
       - p2p-socket:/run/p2p
       - git-socket:/run/git
+    depends_on:
+      init-permissions:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "test", "-S", "/run/p2p/libp2p.sock"]
       interval: 10s
@@ -50,18 +63,21 @@ services:
   # ---------------------------------------------------------------------------
   git-server:
     build:
-      context: ./services/git-server
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: ./services/git-server/Dockerfile
     container_name: p2p-git-server
     network_mode: "none"
     restart: unless-stopped
     environment:
-      - LOG_LEVEL=${LOG_LEVEL:-info}
-      - REPOS_PATH=/repos
-      - GIT_SOCKET_PATH=/run/git/git.sock
+      - GIT_SERVER_LOG_LEVEL=${LOG_LEVEL:-info}
+      - GIT_SERVER_REPOS_PATH=/repos
+      - GIT_SERVER_SOCKET_PATH=/run/git/git.sock
     volumes:
       - git-socket:/run/git
       - ${HOST_REPOS_PATH:-./data/repos}:/repos
+    depends_on:
+      init-permissions:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "test", "-S", "/run/git/git.sock"]
       interval: 10s
@@ -87,18 +103,21 @@ services:
       - "${API_PORT:-3000}:3000"
     restart: unless-stopped
     environment:
-      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - API_LOG_LEVEL=${LOG_LEVEL:-info}
       - API_PORT=3000
-      - GIT_SOCKET_PATH=/run/git/git.sock
-      - P2P_SOCKET_PATH=/run/p2p/libp2p.sock
-      - DB_PATH=/data/api.db
+      - API_GIT_SOCKET=/run/git/git.sock
+      - API_P2P_SOCKET=/run/p2p/libp2p.sock
+      - API_DB_PATH=/data/api.db
+      - API_REPOS_PATH=/repos
     volumes:
       - p2p-socket:/run/p2p
       - git-socket:/run/git
       - ${HOST_DB_PATH:-./data/db}:/data
     depends_on:
+      init-permissions:
+        condition: service_completed_successfully
       libp2p-node:
-        condition: service_healthy
+        condition: service_started
       git-server:
         condition: service_healthy
     healthcheck:

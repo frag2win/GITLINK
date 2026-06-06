@@ -3,14 +3,14 @@
 # ============================================================
 
 # ---- Stage 1: Build ----
-FROM golang:1.22-alpine AS builder
+FROM golang:1.23-alpine AS builder
 
 RUN apk add --no-cache git ca-certificates
 
 WORKDIR /build
 
 # Cache dependency downloads
-COPY go.mod go.sum ./
+COPY go.mod go.sum* ./
 RUN go mod download
 
 # Copy source and compile a statically-linked binary

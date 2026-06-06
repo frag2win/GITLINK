@@ -10,13 +10,16 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
 
 	"github.com/localrepo/api-server/internal/config"
 	"github.com/localrepo/api-server/internal/database"
+	"github.com/localrepo/api-server/internal/handlers"
 	"github.com/localrepo/api-server/internal/middleware"
 	"github.com/localrepo/api-server/internal/router"
+	"github.com/localrepo/api-server/internal/socket"
 )
 
 func main() {
@@ -42,6 +45,10 @@ func main() {
 		AppName:      "LocalRepo API Server",
 		ServerHeader: "LocalRepo",
 	})
+
+	// ---- Initialise Git Client ----
+	gitClient := socket.NewGitClient(cfg.GitSocketPath, 30*time.Second)
+	handlers.Init(gitClient, db)
 
 	// ---- Register global middleware ----
 	middleware.SetupCORS(app)

@@ -62,12 +62,12 @@ pub async fn handle_list_commits(req: ListCommitsRequest, config: &Config) -> Gi
     match crate::git::commits::list_commits(repos_dir, &req.repo_name, start_oid, req.limit as usize, req.offset as usize) {
         Ok(commits) => {
             let proto_commits = commits.into_iter().map(|c| CommitInfo {
-                hash: c.hash,
+                hash: c.id,
                 author_name: c.author_name,
                 author_email: c.author_email,
                 message: c.message,
-                timestamp: c.timestamp,
-                parent_hashes: c.parent_hashes,
+                timestamp: c.authored_at,
+                parent_hashes: c.parent_ids,
             }).collect();
             
             GitCommandResponse {
@@ -91,12 +91,12 @@ pub async fn handle_get_commit(req: GetCommitRequest, config: &Config) -> GitCom
     match crate::git::commits::get_commit_detail(repos_dir, &req.repo_name, &req.hash) {
         Ok(c) => {
             let info = CommitInfo {
-                hash: c.hash,
+                hash: c.id,
                 author_name: c.author_name,
                 author_email: c.author_email,
                 message: c.message,
-                timestamp: c.timestamp,
-                parent_hashes: c.parent_hashes,
+                timestamp: c.authored_at,
+                parent_hashes: c.parent_ids,
             };
             GitCommandResponse {
                 success: true,

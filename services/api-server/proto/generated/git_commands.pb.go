@@ -35,6 +35,9 @@ type GitCommandRequest struct {
 	//	*GitCommandRequest_GetDiff
 	//	*GitCommandRequest_GetFile
 	//	*GitCommandRequest_GetTree
+	//	*GitCommandRequest_InfoRefs
+	//	*GitCommandRequest_UploadPack
+	//	*GitCommandRequest_ReceivePack
 	Command       isGitCommandRequest_Command `protobuf_oneof:"command"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -167,6 +170,33 @@ func (x *GitCommandRequest) GetGetTree() *GetTreeRequest {
 	return nil
 }
 
+func (x *GitCommandRequest) GetInfoRefs() *InfoRefsRequest {
+	if x != nil {
+		if x, ok := x.Command.(*GitCommandRequest_InfoRefs); ok {
+			return x.InfoRefs
+		}
+	}
+	return nil
+}
+
+func (x *GitCommandRequest) GetUploadPack() *UploadPackRequest {
+	if x != nil {
+		if x, ok := x.Command.(*GitCommandRequest_UploadPack); ok {
+			return x.UploadPack
+		}
+	}
+	return nil
+}
+
+func (x *GitCommandRequest) GetReceivePack() *ReceivePackRequest {
+	if x != nil {
+		if x, ok := x.Command.(*GitCommandRequest_ReceivePack); ok {
+			return x.ReceivePack
+		}
+	}
+	return nil
+}
+
 type isGitCommandRequest_Command interface {
 	isGitCommandRequest_Command()
 }
@@ -211,6 +241,18 @@ type GitCommandRequest_GetTree struct {
 	GetTree *GetTreeRequest `protobuf:"bytes,10,opt,name=get_tree,json=getTree,proto3,oneof"`
 }
 
+type GitCommandRequest_InfoRefs struct {
+	InfoRefs *InfoRefsRequest `protobuf:"bytes,11,opt,name=info_refs,json=infoRefs,proto3,oneof"`
+}
+
+type GitCommandRequest_UploadPack struct {
+	UploadPack *UploadPackRequest `protobuf:"bytes,12,opt,name=upload_pack,json=uploadPack,proto3,oneof"`
+}
+
+type GitCommandRequest_ReceivePack struct {
+	ReceivePack *ReceivePackRequest `protobuf:"bytes,13,opt,name=receive_pack,json=receivePack,proto3,oneof"`
+}
+
 func (*GitCommandRequest_CreateRepo) isGitCommandRequest_Command() {}
 
 func (*GitCommandRequest_DeleteRepo) isGitCommandRequest_Command() {}
@@ -231,6 +273,12 @@ func (*GitCommandRequest_GetFile) isGitCommandRequest_Command() {}
 
 func (*GitCommandRequest_GetTree) isGitCommandRequest_Command() {}
 
+func (*GitCommandRequest_InfoRefs) isGitCommandRequest_Command() {}
+
+func (*GitCommandRequest_UploadPack) isGitCommandRequest_Command() {}
+
+func (*GitCommandRequest_ReceivePack) isGitCommandRequest_Command() {}
+
 type GitCommandResponse struct {
 	state        protoimpl.MessageState `protogen:"open.v1"`
 	Success      bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
@@ -247,6 +295,9 @@ type GitCommandResponse struct {
 	//	*GitCommandResponse_GetDiff
 	//	*GitCommandResponse_GetFile
 	//	*GitCommandResponse_GetTree
+	//	*GitCommandResponse_InfoRefs
+	//	*GitCommandResponse_UploadPack
+	//	*GitCommandResponse_ReceivePack
 	Result        isGitCommandResponse_Result `protobuf_oneof:"result"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -393,6 +444,33 @@ func (x *GitCommandResponse) GetGetTree() *GetTreeResponse {
 	return nil
 }
 
+func (x *GitCommandResponse) GetInfoRefs() *InfoRefsResponse {
+	if x != nil {
+		if x, ok := x.Result.(*GitCommandResponse_InfoRefs); ok {
+			return x.InfoRefs
+		}
+	}
+	return nil
+}
+
+func (x *GitCommandResponse) GetUploadPack() *UploadPackResponse {
+	if x != nil {
+		if x, ok := x.Result.(*GitCommandResponse_UploadPack); ok {
+			return x.UploadPack
+		}
+	}
+	return nil
+}
+
+func (x *GitCommandResponse) GetReceivePack() *ReceivePackResponse {
+	if x != nil {
+		if x, ok := x.Result.(*GitCommandResponse_ReceivePack); ok {
+			return x.ReceivePack
+		}
+	}
+	return nil
+}
+
 type isGitCommandResponse_Result interface {
 	isGitCommandResponse_Result()
 }
@@ -437,6 +515,18 @@ type GitCommandResponse_GetTree struct {
 	GetTree *GetTreeResponse `protobuf:"bytes,12,opt,name=get_tree,json=getTree,proto3,oneof"`
 }
 
+type GitCommandResponse_InfoRefs struct {
+	InfoRefs *InfoRefsResponse `protobuf:"bytes,13,opt,name=info_refs,json=infoRefs,proto3,oneof"`
+}
+
+type GitCommandResponse_UploadPack struct {
+	UploadPack *UploadPackResponse `protobuf:"bytes,14,opt,name=upload_pack,json=uploadPack,proto3,oneof"`
+}
+
+type GitCommandResponse_ReceivePack struct {
+	ReceivePack *ReceivePackResponse `protobuf:"bytes,15,opt,name=receive_pack,json=receivePack,proto3,oneof"`
+}
+
 func (*GitCommandResponse_CreateRepo) isGitCommandResponse_Result() {}
 
 func (*GitCommandResponse_DeleteRepo) isGitCommandResponse_Result() {}
@@ -456,6 +546,12 @@ func (*GitCommandResponse_GetDiff) isGitCommandResponse_Result() {}
 func (*GitCommandResponse_GetFile) isGitCommandResponse_Result() {}
 
 func (*GitCommandResponse_GetTree) isGitCommandResponse_Result() {}
+
+func (*GitCommandResponse_InfoRefs) isGitCommandResponse_Result() {}
+
+func (*GitCommandResponse_UploadPack) isGitCommandResponse_Result() {}
+
+func (*GitCommandResponse_ReceivePack) isGitCommandResponse_Result() {}
 
 type RepoInfo struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -1685,11 +1781,299 @@ func (x *GetFileResponse) GetIsBinary() bool {
 	return false
 }
 
+type InfoRefsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RepoName      string                 `protobuf:"bytes,1,opt,name=repo_name,json=repoName,proto3" json:"repo_name,omitempty"`
+	Service       string                 `protobuf:"bytes,2,opt,name=service,proto3" json:"service,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *InfoRefsRequest) Reset() {
+	*x = InfoRefsRequest{}
+	mi := &file_git_commands_proto_msgTypes[25]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *InfoRefsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*InfoRefsRequest) ProtoMessage() {}
+
+func (x *InfoRefsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_git_commands_proto_msgTypes[25]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use InfoRefsRequest.ProtoReflect.Descriptor instead.
+func (*InfoRefsRequest) Descriptor() ([]byte, []int) {
+	return file_git_commands_proto_rawDescGZIP(), []int{25}
+}
+
+func (x *InfoRefsRequest) GetRepoName() string {
+	if x != nil {
+		return x.RepoName
+	}
+	return ""
+}
+
+func (x *InfoRefsRequest) GetService() string {
+	if x != nil {
+		return x.Service
+	}
+	return ""
+}
+
+type InfoRefsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Output        []byte                 `protobuf:"bytes,1,opt,name=output,proto3" json:"output,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *InfoRefsResponse) Reset() {
+	*x = InfoRefsResponse{}
+	mi := &file_git_commands_proto_msgTypes[26]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *InfoRefsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*InfoRefsResponse) ProtoMessage() {}
+
+func (x *InfoRefsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_git_commands_proto_msgTypes[26]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use InfoRefsResponse.ProtoReflect.Descriptor instead.
+func (*InfoRefsResponse) Descriptor() ([]byte, []int) {
+	return file_git_commands_proto_rawDescGZIP(), []int{26}
+}
+
+func (x *InfoRefsResponse) GetOutput() []byte {
+	if x != nil {
+		return x.Output
+	}
+	return nil
+}
+
+type UploadPackRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RepoName      string                 `protobuf:"bytes,1,opt,name=repo_name,json=repoName,proto3" json:"repo_name,omitempty"`
+	Body          []byte                 `protobuf:"bytes,2,opt,name=body,proto3" json:"body,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UploadPackRequest) Reset() {
+	*x = UploadPackRequest{}
+	mi := &file_git_commands_proto_msgTypes[27]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UploadPackRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UploadPackRequest) ProtoMessage() {}
+
+func (x *UploadPackRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_git_commands_proto_msgTypes[27]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UploadPackRequest.ProtoReflect.Descriptor instead.
+func (*UploadPackRequest) Descriptor() ([]byte, []int) {
+	return file_git_commands_proto_rawDescGZIP(), []int{27}
+}
+
+func (x *UploadPackRequest) GetRepoName() string {
+	if x != nil {
+		return x.RepoName
+	}
+	return ""
+}
+
+func (x *UploadPackRequest) GetBody() []byte {
+	if x != nil {
+		return x.Body
+	}
+	return nil
+}
+
+type UploadPackResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Output        []byte                 `protobuf:"bytes,1,opt,name=output,proto3" json:"output,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UploadPackResponse) Reset() {
+	*x = UploadPackResponse{}
+	mi := &file_git_commands_proto_msgTypes[28]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UploadPackResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UploadPackResponse) ProtoMessage() {}
+
+func (x *UploadPackResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_git_commands_proto_msgTypes[28]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UploadPackResponse.ProtoReflect.Descriptor instead.
+func (*UploadPackResponse) Descriptor() ([]byte, []int) {
+	return file_git_commands_proto_rawDescGZIP(), []int{28}
+}
+
+func (x *UploadPackResponse) GetOutput() []byte {
+	if x != nil {
+		return x.Output
+	}
+	return nil
+}
+
+type ReceivePackRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RepoName      string                 `protobuf:"bytes,1,opt,name=repo_name,json=repoName,proto3" json:"repo_name,omitempty"`
+	Body          []byte                 `protobuf:"bytes,2,opt,name=body,proto3" json:"body,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ReceivePackRequest) Reset() {
+	*x = ReceivePackRequest{}
+	mi := &file_git_commands_proto_msgTypes[29]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReceivePackRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReceivePackRequest) ProtoMessage() {}
+
+func (x *ReceivePackRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_git_commands_proto_msgTypes[29]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReceivePackRequest.ProtoReflect.Descriptor instead.
+func (*ReceivePackRequest) Descriptor() ([]byte, []int) {
+	return file_git_commands_proto_rawDescGZIP(), []int{29}
+}
+
+func (x *ReceivePackRequest) GetRepoName() string {
+	if x != nil {
+		return x.RepoName
+	}
+	return ""
+}
+
+func (x *ReceivePackRequest) GetBody() []byte {
+	if x != nil {
+		return x.Body
+	}
+	return nil
+}
+
+type ReceivePackResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Output        []byte                 `protobuf:"bytes,1,opt,name=output,proto3" json:"output,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ReceivePackResponse) Reset() {
+	*x = ReceivePackResponse{}
+	mi := &file_git_commands_proto_msgTypes[30]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReceivePackResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReceivePackResponse) ProtoMessage() {}
+
+func (x *ReceivePackResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_git_commands_proto_msgTypes[30]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReceivePackResponse.ProtoReflect.Descriptor instead.
+func (*ReceivePackResponse) Descriptor() ([]byte, []int) {
+	return file_git_commands_proto_rawDescGZIP(), []int{30}
+}
+
+func (x *ReceivePackResponse) GetOutput() []byte {
+	if x != nil {
+		return x.Output
+	}
+	return nil
+}
+
 var File_git_commands_proto protoreflect.FileDescriptor
 
 const file_git_commands_proto_rawDesc = "" +
 	"\n" +
-	"\x12git_commands.proto\x12\fgit_commands\"\x82\x05\n" +
+	"\x12git_commands.proto\x12\fgit_commands\"\xcb\x06\n" +
 	"\x11GitCommandRequest\x12B\n" +
 	"\vcreate_repo\x18\x01 \x01(\v2\x1f.git_commands.CreateRepoRequestH\x00R\n" +
 	"createRepo\x12B\n" +
@@ -1705,8 +2089,12 @@ const file_git_commands_proto_rawDesc = "" +
 	"\bget_diff\x18\b \x01(\v2\x1c.git_commands.GetDiffRequestH\x00R\agetDiff\x129\n" +
 	"\bget_file\x18\t \x01(\v2\x1c.git_commands.GetFileRequestH\x00R\agetFile\x129\n" +
 	"\bget_tree\x18\n" +
-	" \x01(\v2\x1c.git_commands.GetTreeRequestH\x00R\agetTreeB\t\n" +
-	"\acommand\"\xcb\x05\n" +
+	" \x01(\v2\x1c.git_commands.GetTreeRequestH\x00R\agetTree\x12<\n" +
+	"\tinfo_refs\x18\v \x01(\v2\x1d.git_commands.InfoRefsRequestH\x00R\binfoRefs\x12B\n" +
+	"\vupload_pack\x18\f \x01(\v2\x1f.git_commands.UploadPackRequestH\x00R\n" +
+	"uploadPack\x12E\n" +
+	"\freceive_pack\x18\r \x01(\v2 .git_commands.ReceivePackRequestH\x00R\vreceivePackB\t\n" +
+	"\acommand\"\x97\a\n" +
 	"\x12GitCommandResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12#\n" +
 	"\rerror_message\x18\x02 \x01(\tR\ferrorMessage\x12C\n" +
@@ -1724,7 +2112,11 @@ const file_git_commands_proto_rawDesc = "" +
 	"\bget_diff\x18\n" +
 	" \x01(\v2\x1d.git_commands.GetDiffResponseH\x00R\agetDiff\x12:\n" +
 	"\bget_file\x18\v \x01(\v2\x1d.git_commands.GetFileResponseH\x00R\agetFile\x12:\n" +
-	"\bget_tree\x18\f \x01(\v2\x1d.git_commands.GetTreeResponseH\x00R\agetTreeB\b\n" +
+	"\bget_tree\x18\f \x01(\v2\x1d.git_commands.GetTreeResponseH\x00R\agetTree\x12=\n" +
+	"\tinfo_refs\x18\r \x01(\v2\x1e.git_commands.InfoRefsResponseH\x00R\binfoRefs\x12C\n" +
+	"\vupload_pack\x18\x0e \x01(\v2 .git_commands.UploadPackResponseH\x00R\n" +
+	"uploadPack\x12F\n" +
+	"\freceive_pack\x18\x0f \x01(\v2!.git_commands.ReceivePackResponseH\x00R\vreceivePackB\b\n" +
 	"\x06result\"\xd8\x01\n" +
 	"\bRepoInfo\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
@@ -1802,7 +2194,22 @@ const file_git_commands_proto_rawDesc = "" +
 	"\x0fGetFileResponse\x12\x18\n" +
 	"\acontent\x18\x01 \x01(\fR\acontent\x12\x12\n" +
 	"\x04size\x18\x02 \x01(\x03R\x04size\x12\x1b\n" +
-	"\tis_binary\x18\x03 \x01(\bR\bisBinaryB4Z2github.com/localrepo/api-server/proto/generated;pbb\x06proto3"
+	"\tis_binary\x18\x03 \x01(\bR\bisBinary\"H\n" +
+	"\x0fInfoRefsRequest\x12\x1b\n" +
+	"\trepo_name\x18\x01 \x01(\tR\brepoName\x12\x18\n" +
+	"\aservice\x18\x02 \x01(\tR\aservice\"*\n" +
+	"\x10InfoRefsResponse\x12\x16\n" +
+	"\x06output\x18\x01 \x01(\fR\x06output\"D\n" +
+	"\x11UploadPackRequest\x12\x1b\n" +
+	"\trepo_name\x18\x01 \x01(\tR\brepoName\x12\x12\n" +
+	"\x04body\x18\x02 \x01(\fR\x04body\",\n" +
+	"\x12UploadPackResponse\x12\x16\n" +
+	"\x06output\x18\x01 \x01(\fR\x06output\"E\n" +
+	"\x12ReceivePackRequest\x12\x1b\n" +
+	"\trepo_name\x18\x01 \x01(\tR\brepoName\x12\x12\n" +
+	"\x04body\x18\x02 \x01(\fR\x04body\"-\n" +
+	"\x13ReceivePackResponse\x12\x16\n" +
+	"\x06output\x18\x01 \x01(\fR\x06outputB4Z2github.com/localrepo/api-server/proto/generated;pbb\x06proto3"
 
 var (
 	file_git_commands_proto_rawDescOnce sync.Once
@@ -1816,7 +2223,7 @@ func file_git_commands_proto_rawDescGZIP() []byte {
 	return file_git_commands_proto_rawDescData
 }
 
-var file_git_commands_proto_msgTypes = make([]protoimpl.MessageInfo, 25)
+var file_git_commands_proto_msgTypes = make([]protoimpl.MessageInfo, 31)
 var file_git_commands_proto_goTypes = []any{
 	(*GitCommandRequest)(nil),   // 0: git_commands.GitCommandRequest
 	(*GitCommandResponse)(nil),  // 1: git_commands.GitCommandResponse
@@ -1843,6 +2250,12 @@ var file_git_commands_proto_goTypes = []any{
 	(*GetTreeResponse)(nil),     // 22: git_commands.GetTreeResponse
 	(*GetFileRequest)(nil),      // 23: git_commands.GetFileRequest
 	(*GetFileResponse)(nil),     // 24: git_commands.GetFileResponse
+	(*InfoRefsRequest)(nil),     // 25: git_commands.InfoRefsRequest
+	(*InfoRefsResponse)(nil),    // 26: git_commands.InfoRefsResponse
+	(*UploadPackRequest)(nil),   // 27: git_commands.UploadPackRequest
+	(*UploadPackResponse)(nil),  // 28: git_commands.UploadPackResponse
+	(*ReceivePackRequest)(nil),  // 29: git_commands.ReceivePackRequest
+	(*ReceivePackResponse)(nil), // 30: git_commands.ReceivePackResponse
 }
 var file_git_commands_proto_depIdxs = []int32{
 	3,  // 0: git_commands.GitCommandRequest.create_repo:type_name -> git_commands.CreateRepoRequest
@@ -1855,26 +2268,32 @@ var file_git_commands_proto_depIdxs = []int32{
 	18, // 7: git_commands.GitCommandRequest.get_diff:type_name -> git_commands.GetDiffRequest
 	23, // 8: git_commands.GitCommandRequest.get_file:type_name -> git_commands.GetFileRequest
 	21, // 9: git_commands.GitCommandRequest.get_tree:type_name -> git_commands.GetTreeRequest
-	4,  // 10: git_commands.GitCommandResponse.create_repo:type_name -> git_commands.CreateRepoResponse
-	6,  // 11: git_commands.GitCommandResponse.delete_repo:type_name -> git_commands.DeleteRepoResponse
-	8,  // 12: git_commands.GitCommandResponse.list_repos:type_name -> git_commands.ListReposResponse
-	10, // 13: git_commands.GitCommandResponse.push:type_name -> git_commands.PushResponse
-	12, // 14: git_commands.GitCommandResponse.pull:type_name -> git_commands.PullResponse
-	15, // 15: git_commands.GitCommandResponse.list_commits:type_name -> git_commands.ListCommitsResponse
-	17, // 16: git_commands.GitCommandResponse.get_commit:type_name -> git_commands.GetCommitResponse
-	19, // 17: git_commands.GitCommandResponse.get_diff:type_name -> git_commands.GetDiffResponse
-	24, // 18: git_commands.GitCommandResponse.get_file:type_name -> git_commands.GetFileResponse
-	22, // 19: git_commands.GitCommandResponse.get_tree:type_name -> git_commands.GetTreeResponse
-	2,  // 20: git_commands.CreateRepoResponse.repo:type_name -> git_commands.RepoInfo
-	2,  // 21: git_commands.ListReposResponse.repos:type_name -> git_commands.RepoInfo
-	13, // 22: git_commands.ListCommitsResponse.commits:type_name -> git_commands.CommitInfo
-	13, // 23: git_commands.GetCommitResponse.commit:type_name -> git_commands.CommitInfo
-	20, // 24: git_commands.GetTreeResponse.entries:type_name -> git_commands.TreeEntry
-	25, // [25:25] is the sub-list for method output_type
-	25, // [25:25] is the sub-list for method input_type
-	25, // [25:25] is the sub-list for extension type_name
-	25, // [25:25] is the sub-list for extension extendee
-	0,  // [0:25] is the sub-list for field type_name
+	25, // 10: git_commands.GitCommandRequest.info_refs:type_name -> git_commands.InfoRefsRequest
+	27, // 11: git_commands.GitCommandRequest.upload_pack:type_name -> git_commands.UploadPackRequest
+	29, // 12: git_commands.GitCommandRequest.receive_pack:type_name -> git_commands.ReceivePackRequest
+	4,  // 13: git_commands.GitCommandResponse.create_repo:type_name -> git_commands.CreateRepoResponse
+	6,  // 14: git_commands.GitCommandResponse.delete_repo:type_name -> git_commands.DeleteRepoResponse
+	8,  // 15: git_commands.GitCommandResponse.list_repos:type_name -> git_commands.ListReposResponse
+	10, // 16: git_commands.GitCommandResponse.push:type_name -> git_commands.PushResponse
+	12, // 17: git_commands.GitCommandResponse.pull:type_name -> git_commands.PullResponse
+	15, // 18: git_commands.GitCommandResponse.list_commits:type_name -> git_commands.ListCommitsResponse
+	17, // 19: git_commands.GitCommandResponse.get_commit:type_name -> git_commands.GetCommitResponse
+	19, // 20: git_commands.GitCommandResponse.get_diff:type_name -> git_commands.GetDiffResponse
+	24, // 21: git_commands.GitCommandResponse.get_file:type_name -> git_commands.GetFileResponse
+	22, // 22: git_commands.GitCommandResponse.get_tree:type_name -> git_commands.GetTreeResponse
+	26, // 23: git_commands.GitCommandResponse.info_refs:type_name -> git_commands.InfoRefsResponse
+	28, // 24: git_commands.GitCommandResponse.upload_pack:type_name -> git_commands.UploadPackResponse
+	30, // 25: git_commands.GitCommandResponse.receive_pack:type_name -> git_commands.ReceivePackResponse
+	2,  // 26: git_commands.CreateRepoResponse.repo:type_name -> git_commands.RepoInfo
+	2,  // 27: git_commands.ListReposResponse.repos:type_name -> git_commands.RepoInfo
+	13, // 28: git_commands.ListCommitsResponse.commits:type_name -> git_commands.CommitInfo
+	13, // 29: git_commands.GetCommitResponse.commit:type_name -> git_commands.CommitInfo
+	20, // 30: git_commands.GetTreeResponse.entries:type_name -> git_commands.TreeEntry
+	31, // [31:31] is the sub-list for method output_type
+	31, // [31:31] is the sub-list for method input_type
+	31, // [31:31] is the sub-list for extension type_name
+	31, // [31:31] is the sub-list for extension extendee
+	0,  // [0:31] is the sub-list for field type_name
 }
 
 func init() { file_git_commands_proto_init() }
@@ -1893,6 +2312,9 @@ func file_git_commands_proto_init() {
 		(*GitCommandRequest_GetDiff)(nil),
 		(*GitCommandRequest_GetFile)(nil),
 		(*GitCommandRequest_GetTree)(nil),
+		(*GitCommandRequest_InfoRefs)(nil),
+		(*GitCommandRequest_UploadPack)(nil),
+		(*GitCommandRequest_ReceivePack)(nil),
 	}
 	file_git_commands_proto_msgTypes[1].OneofWrappers = []any{
 		(*GitCommandResponse_CreateRepo)(nil),
@@ -1905,6 +2327,9 @@ func file_git_commands_proto_init() {
 		(*GitCommandResponse_GetDiff)(nil),
 		(*GitCommandResponse_GetFile)(nil),
 		(*GitCommandResponse_GetTree)(nil),
+		(*GitCommandResponse_InfoRefs)(nil),
+		(*GitCommandResponse_UploadPack)(nil),
+		(*GitCommandResponse_ReceivePack)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -1912,7 +2337,7 @@ func file_git_commands_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_git_commands_proto_rawDesc), len(file_git_commands_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   25,
+			NumMessages:   31,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

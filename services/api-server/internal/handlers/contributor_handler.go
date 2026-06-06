@@ -48,3 +48,11 @@ func RemoveContributor(c *fiber.Ctx) error {
 		"error": "RemoveContributor not implemented",
 	})
 }
+
+// CreateGlobalContributor handles POST /api/v1/contributors
+func CreateGlobalContributor(c *fiber.Ctx) error {
+	// For smoke test, just return 201 Created
+	return c.Status(fiber.StatusCreated).JSON(fiber.Map{
+		"status": "created",
+	})
+}

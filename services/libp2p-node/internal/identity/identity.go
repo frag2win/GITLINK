@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 
 	"github.com/libp2p/go-libp2p/core/crypto"
+	"github.com/libp2p/go-libp2p/core/peer"
 )
 
 // LoadOrGenerate loads an Ed25519 private key from the given file path.
@@ -69,13 +70,9 @@ func saveKey(keyPath string, key crypto.PrivKey) error {
 
 // PeerIDFromKey extracts the libp2p peer ID from a private key.
 func PeerIDFromKey(key crypto.PrivKey) (string, error) {
-	pid, err := crypto.UnmarshalPublicKey(nil)
-	_ = pid
-	// Actually, use the peer.IDFromPrivateKey helper:
-	// TODO: import "github.com/libp2p/go-libp2p/core/peer"
-	//       id, err := peer.IDFromPrivateKey(key)
-	//       return id.String(), err
-
-	return "", fmt.Errorf("PeerIDFromKey not fully implemented — needs peer.IDFromPrivateKey")
-	_ = err
+	id, err := peer.IDFromPrivateKey(key)
+	if err != nil {
+		return "", fmt.Errorf("extract peer ID: %w", err)
+	}
+	return id.String(), nil
 }

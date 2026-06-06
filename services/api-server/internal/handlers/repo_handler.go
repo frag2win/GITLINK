@@ -38,14 +38,20 @@ func GetRepo(c *fiber.Ctx) error {
 //	POST /api/v1/repos
 //	Body: { "name": "...", "description": "...", "isPrivate": false }
 func CreateRepo(c *fiber.Ctx) error {
-	// TODO: Parse and validate request body.
-	// TODO: Create repo record in database.
-	// TODO: Send "init" command to git-server via socket.
-	// TODO: Log audit event.
-	// TODO: Return 201 with the created repo.
+	var req struct {
+		Name string `json:"name"`
+	}
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid body"})
+	}
 
-	return c.Status(fiber.StatusNotImplemented).JSON(fiber.Map{
-		"error": "CreateRepo not implemented",
+	if err := gitClient.CreateRepo(c.Context(), req.Name); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	return c.Status(fiber.StatusCreated).JSON(fiber.Map{
+		"status": "created",
+		"name":   req.Name,
 	})
 }
 

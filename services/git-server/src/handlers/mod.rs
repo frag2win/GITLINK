@@ -10,3 +10,4 @@
 pub mod browse_handler;
 pub mod git_handler;
 pub mod repo_handler;
+pub mod http_handler;
