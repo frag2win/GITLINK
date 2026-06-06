@@ -1,0 +1,175 @@
+syntax = "proto3";
+
+package git_commands;
+
+option go_package = "github.com/localrepo/api-server/proto/generated;pb";
+
+// ---------------------------------------------------------------------------
+// Request/Response Envelopes
+// ---------------------------------------------------------------------------
+
+message GitCommandRequest {
+  oneof command {
+    CreateRepoRequest create_repo = 1;
+    DeleteRepoRequest delete_repo = 2;
+    ListReposRequest list_repos = 3;
+    PushRequest push = 4;
+    PullRequest pull = 5;
+    ListCommitsRequest list_commits = 6;
+    GetCommitRequest get_commit = 7;
+    GetDiffRequest get_diff = 8;
+    GetFileRequest get_file = 9;
+    GetTreeRequest get_tree = 10;
+  }
+}
+
+message GitCommandResponse {
+  bool success = 1;
+  string error_message = 2;
+
+  oneof result {
+    CreateRepoResponse create_repo = 3;
+    DeleteRepoResponse delete_repo = 4;
+    ListReposResponse list_repos = 5;
+    PushResponse push = 6;
+    PullResponse pull = 7;
+    ListCommitsResponse list_commits = 8;
+    GetCommitResponse get_commit = 9;
+    GetDiffResponse get_diff = 10;
+    GetFileResponse get_file = 11;
+    GetTreeResponse get_tree = 12;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Repo Management
+// ---------------------------------------------------------------------------
+
+message RepoInfo {
+  string name = 1;
+  string path = 2;
+  bool is_bare = 3;
+  string default_branch = 4;
+  string last_commit_at = 5;
+  int32 branch_count = 6;
+  int32 tag_count = 7;
+}
+
+message CreateRepoRequest {
+  string name = 1;
+}
+
+message CreateRepoResponse {
+  RepoInfo repo = 1;
+}
+
+message DeleteRepoRequest {
+  string name = 1;
+}
+
+message DeleteRepoResponse {}
+
+message ListReposRequest {}
+
+message ListReposResponse {
+  repeated RepoInfo repos = 1;
+}
+
+// ---------------------------------------------------------------------------
+// Push & Pull Operations
+// ---------------------------------------------------------------------------
+
+message PushRequest {
+  string repo_name = 1;
+  bytes pack_data = 2;
+}
+
+message PushResponse {
+  string new_head = 1;
+}
+
+message PullRequest {
+  string repo_name = 1;
+}
+
+message PullResponse {
+  bytes pack_data = 1;
+}
+
+// ---------------------------------------------------------------------------
+// Commit History & Diffs
+// ---------------------------------------------------------------------------
+
+message CommitInfo {
+  string hash = 1;
+  string author_name = 2;
+  string author_email = 3;
+  string message = 4;
+  string timestamp = 5; // ISO-8601 string
+  repeated string parent_hashes = 6;
+}
+
+message ListCommitsRequest {
+  string repo_name = 1;
+  string branch = 2; // defaults to default_branch
+  int32 limit = 3;
+  int32 offset = 4;
+}
+
+message ListCommitsResponse {
+  repeated CommitInfo commits = 1;
+  int32 total_count = 2;
+}
+
+message GetCommitRequest {
+  string repo_name = 1;
+  string hash = 2;
+}
+
+message GetCommitResponse {
+  CommitInfo commit = 1;
+}
+
+message GetDiffRequest {
+  string repo_name = 1;
+  string base_hash = 2; // empty means compare to parent
+  string target_hash = 3;
+}
+
+message GetDiffResponse {
+  string diff_text = 1;
+}
+
+// ---------------------------------------------------------------------------
+// File Browser (Objects & Trees)
+// ---------------------------------------------------------------------------
+
+message TreeEntry {
+  string name = 1;
+  string path = 2;
+  string type = 3; // "blob" or "tree"
+  string oid = 4;
+  int64 size = 5; // size in bytes for blobs, 0 for trees
+}
+
+message GetTreeRequest {
+  string repo_name = 1;
+  string ref_or_hash = 2; // e.g. "main" or a specific commit hash
+  string path = 3; // path within the repository
+}
+
+message GetTreeResponse {
+  repeated TreeEntry entries = 1;
+}
+
+message GetFileRequest {
+  string repo_name = 1;
+  string ref_or_hash = 2;
+  string path = 3;
+}
+
+message GetFileResponse {
+  bytes content = 1;
+  int64 size = 2;
+  bool is_binary = 3;
+}
