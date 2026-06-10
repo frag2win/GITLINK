@@ -28,3 +28,8 @@ export function createBranch(repoName: string, params: CreateBranchParams): Prom
 export function deleteBranch(repoName: string, branchName: string): Promise<void> {
   return del(`/repos/${encodeURIComponent(repoName)}/branches/${encodeURIComponent(branchName)}`);
 }
+
+/** Set branch protection (e.g., require PRs). */
+export function protectBranch(repoName: string, branchName: string, requirePR: boolean): Promise<any> {
+  return post(`/repos/${encodeURIComponent(repoName)}/branches/${encodeURIComponent(branchName)}/protect`, { requirePR });
+}

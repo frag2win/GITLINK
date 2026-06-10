@@ -146,3 +146,17 @@ export interface ApiError {
   message: string;
   details?: Record<string, string>;
 }
+
+/** Represents a Pull Request in a repository. */
+export interface PullRequest {
+  ID: number;
+  CreatedAt: string;
+  UpdatedAt: string;
+  DeletedAt: string | null;
+  repository_id: number;
+  title: string;
+  description: string;
+  baseBranch: string;
+  headBranch: string;
+  status: 'open' | 'merged' | 'closed';
+}

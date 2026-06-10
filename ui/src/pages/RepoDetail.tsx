@@ -17,9 +17,10 @@ import BranchSelector from '@/components/git/BranchSelector';
 import FileBrowser from '@/components/git/FileBrowser';
 import CommitList from '@/components/git/CommitList';
 import CommitDetail from '@/components/git/CommitDetail';
+import PullRequestList from '@/components/git/PullRequestList';
 import LoadingSpinner from '@/components/common/LoadingSpinner';
 
-type Tab = 'files' | 'commits' | 'branches' | 'settings';
+type Tab = 'files' | 'commits' | 'branches' | 'pulls' | 'settings';
 
 export default function RepoDetail() {
   const { name } = useParams<{ name: string }>();
@@ -73,6 +74,7 @@ export default function RepoDetail() {
     { key: 'files', label: 'Files' },
     { key: 'commits', label: 'Commits' },
     { key: 'branches', label: `Branches (${branches?.length ?? 0})` },
+    { key: 'pulls', label: 'Pull Requests' },
     { key: 'settings', label: 'Settings' },
   ];
 
@@ -188,6 +190,10 @@ export default function RepoDetail() {
         </div>
       )}
 
+      {activeTab === 'pulls' && name && (
+        <PullRequestList repoName={name} branches={branches ?? []} />
+      )}
+
       {activeTab === 'settings' && (
         <div className="card space-y-6">
           <h3 className="text-lg font-semibold">Repository Settings</h3>
@@ -225,6 +231,29 @@ export default function RepoDetail() {
             <button className="btn-secondary text-red-600 hover:text-red-700">
               Delete Repository
             </button>
+          </div>
+
+          <div className="border-t border-surface-200 pt-6 dark:border-surface-700">
+            <h4 className="mb-4 text-md font-semibold">Branch Protection</h4>
+            <div className="space-y-4">
+              {branches?.map(b => (
+                <div key={b.name} className="flex items-center justify-between">
+                  <span className="font-mono text-sm">{b.name}</span>
+                  <button
+                    onClick={async () => {
+                      const reqPR = confirm(`Toggle Require PR for ${b.name}?`);
+                      if (reqPR !== null) {
+                        await import('@/api/branches').then(m => m.protectBranch(repo.name, b.name, reqPR));
+                        alert('Branch protection updated.');
+                      }
+                    }}
+                    className="btn-secondary text-xs"
+                  >
+                    Toggle Protection
+                  </button>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       )}
