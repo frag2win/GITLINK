@@ -23,6 +23,7 @@ message GitCommandRequest {
     InfoRefsRequest info_refs = 11;
     UploadPackRequest upload_pack = 12;
     ReceivePackRequest receive_pack = 13;
+    MergePullRequest merge_pull_request = 14;
   }
 }
 
@@ -44,6 +45,7 @@ message GitCommandResponse {
     InfoRefsResponse info_refs = 13;
     UploadPackResponse upload_pack = 14;
     ReceivePackResponse receive_pack = 15;
+    MergePullRequestResponse merge_pull_request = 16;
   }
 }
 
@@ -210,3 +212,21 @@ message ReceivePackRequest {
 message ReceivePackResponse {
   bytes output = 1;
 }
+
+// ---------------------------------------------------------------------------
+// Pull Requests
+// ---------------------------------------------------------------------------
+
+message MergePullRequest {
+  string repo_name = 1;
+  string base_branch = 2;
+  string head_branch = 3;
+  string author_name = 4;
+  string author_email = 5;
+  string commit_message = 6;
+}
+
+message MergePullRequestResponse {
+  string merge_commit_hash = 1;
+}
+

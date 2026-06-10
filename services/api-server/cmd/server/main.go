@@ -30,7 +30,7 @@ func main() {
 	}
 
 	// ---- Initialise database ----
-	db, err := database.New(cfg.DBPath)
+	db, err := database.New(cfg.DBUrl)
 	if err != nil {
 		log.Fatalf("failed to initialise database: %v", err)
 	}

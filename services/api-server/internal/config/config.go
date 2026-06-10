@@ -13,8 +13,8 @@ type Config struct {
 	// Port is the HTTP port the server listens on (default "3000").
 	Port string
 
-	// DBPath is the filesystem path to the SQLite database file.
-	DBPath string
+	// DBUrl is the postgres connection string.
+	DBUrl string
 
 	// ReposPath is the root directory where bare Git repositories are stored.
 	ReposPath string
@@ -33,7 +33,7 @@ type Config struct {
 func Load() (*Config, error) {
 	cfg := &Config{
 		Port:          envOrDefault("API_PORT", "3000"),
-		DBPath:        envOrDefault("API_DB_PATH", "./data/localrepo.db"),
+		DBUrl:         envOrDefault("API_DB_URL", ""),
 		ReposPath:     envOrDefault("API_REPOS_PATH", "./repos"),
 		GitSocketPath: envOrDefault("API_GIT_SOCKET", "/tmp/git-server.sock"),
 		P2PSocketPath: envOrDefault("API_P2P_SOCKET", "/tmp/libp2p-node.sock"),
@@ -52,8 +52,8 @@ func (c *Config) validate() error {
 	if c.Port == "" {
 		return fmt.Errorf("port must not be empty")
 	}
-	if c.DBPath == "" {
-		return fmt.Errorf("database path must not be empty")
+	if c.DBUrl == "" {
+		return fmt.Errorf("database URL must not be empty")
 	}
 	if !isValidLogLevel(c.LogLevel) {
 		return fmt.Errorf("invalid log level: %s", c.LogLevel)

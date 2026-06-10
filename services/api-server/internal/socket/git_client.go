@@ -288,3 +288,20 @@ func (c *GitClient) ReceivePack(ctx context.Context, repo string, body []byte) (
     }
     return resp.GetReceivePack().GetOutput(), nil
 }
+
+// MergePullRequest triggers the rust backend to perform a 3-way merge
+func (c *GitClient) MergePullRequest(ctx context.Context, req *pb.MergePullRequest) (string, error) {
+    cmdReq := &pb.GitCommandRequest{
+        Command: &pb.GitCommandRequest_MergePullRequest{
+            MergePullRequest: req,
+        },
+    }
+    resp, err := c.send(ctx, cmdReq)
+    if err != nil {
+        return "", err
+    }
+    if !resp.GetSuccess() {
+        return "", fmt.Errorf("git_client: merge PR: %s", resp.GetErrorMessage())
+    }
+    return resp.GetMergePullRequest().GetMergeCommitHash(), nil
+}

@@ -1,0 +1,27 @@
+#!/bin/sh
+
+# pre-receive hook
+# Intercepts pushes to validate branch protections via the API server.
+
+API_URL="http://api-server:3000/internal/hooks/pre-receive"
+REPO_NAME=$(basename "$PWD" .git)
+
+while read oldrev newrev refname; do
+    # Only validate branch pushes, skip tags for now
+    case "$refname" in
+        refs/heads/*)
+            BRANCH=${refname#refs/heads/}
+            
+            # Make HTTP POST to the api-server
+            HTTP_CODE=$(wget -qO- --post-data="{\"repo\": \"$REPO_NAME\", \"branch\": \"$BRANCH\", \"oldrev\": \"$oldrev\", \"newrev\": \"$newrev\"}" --header="Content-Type: application/json" "$API_URL" | grep -o '"allowed":\s*true')
+            
+            if [ -z "$HTTP_CODE" ]; then
+                echo "GL-HOOK-ERR: Push to branch '$BRANCH' is rejected by branch protection rules." >&2
+                echo "GL-HOOK-ERR: You must create a Pull Request." >&2
+                exit 1
+            fi
+            ;;
+    esac
+done
+
+exit 0

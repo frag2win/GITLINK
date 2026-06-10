@@ -127,6 +127,9 @@ async fn dispatch_request(request: GitCommandRequest, config: &Config) -> GitCom
         RequestCommand::InfoRefs(req) => crate::handlers::http_handler::handle_info_refs(req, config).await,
         RequestCommand::UploadPack(req) => crate::handlers::http_handler::handle_upload_pack(req, config).await,
         RequestCommand::ReceivePack(req) => crate::handlers::http_handler::handle_receive_pack(req, config).await,
+
+        // Pull Requests
+        RequestCommand::MergePullRequest(req) => crate::handlers::git_handler::handle_merge_pull_request(req, config).await,
     };
 
     result

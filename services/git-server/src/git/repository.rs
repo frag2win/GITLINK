@@ -34,6 +34,22 @@ pub fn init_bare(repos_dir: &Path, name: &str) -> Result<RepoInfo, GitError> {
 
     let repo = Repository::init_bare(&repo_path)?;
 
+    // Install pre-receive hook
+    let hook_path = repo_path.join("hooks").join("pre-receive");
+    let hook_script = include_str!("../../scripts/pre-receive");
+    std::fs::write(&hook_path, hook_script).map_err(|e| GitError::Other(e.to_string()))?;
+    
+    // Make the hook executable (Unix-specific)
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = std::fs::metadata(&hook_path)
+            .map_err(|e| GitError::Other(e.to_string()))?
+            .permissions();
+        perms.set_mode(0o755);
+        std::fs::set_permissions(&hook_path, perms).map_err(|e| GitError::Other(e.to_string()))?;
+    }
+
     Ok(build_repo_info(name, &repo_path, &repo))
 }
 

@@ -107,6 +107,7 @@ services:
       - API_PORT=3000
       - API_GIT_SOCKET=/run/git/git.sock
       - API_P2P_SOCKET=/run/p2p/libp2p.sock
+      - API_DB_URL=postgres://gitadmin:gitpassword@postgres:5432/gitplatform?sslmode=disable
       - API_DB_PATH=/data/api.db
       - API_REPOS_PATH=/repos
     volumes:
@@ -120,12 +121,35 @@ services:
         condition: service_started
       git-server:
         condition: service_healthy
+      postgres:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000/health"]
       interval: 10s
       timeout: 5s
       retries: 3
       start_period: 10s
+
+  # ---------------------------------------------------------------------------
+  # postgres — Relational DB for platform data (Users, PRs, Branch Protection)
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: postgres:15-alpine
+    container_name: p2p-git-postgres
+    networks:
+      - internal-bridge
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: gitadmin
+      POSTGRES_PASSWORD: gitpassword
+      POSTGRES_DB: gitplatform
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gitadmin -d gitplatform"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
 # =============================================================================
 # Volumes — Shared Unix domain socket channels & persistent identity
@@ -142,6 +166,10 @@ volumes:
 
   # Unix domain socket for libp2p-node ↔ api-server IPC
   p2p-socket:
+    driver: local
+
+  # PostgreSQL database persistence
+  pg-data:
     driver: local
 
 # =============================================================================

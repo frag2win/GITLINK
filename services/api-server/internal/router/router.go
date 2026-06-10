@@ -38,6 +38,12 @@ func Setup(app *fiber.App, db *database.DB, cfg *config.Config) {
 	protected.Get("/repos/:id/branches/:branch", handlers.GetBranch)
 	protected.Post("/repos/:id/branches", handlers.CreateBranch)
 	protected.Delete("/repos/:id/branches/:branch", handlers.DeleteBranch)
+	protected.Post("/repos/:id/branches/:branch/protect", handlers.ProtectBranch)
+
+	// Pull Request routes
+	protected.Get("/repos/:id/pulls", handlers.ListPullRequests)
+	protected.Post("/repos/:id/pulls", handlers.CreatePullRequest)
+	protected.Post("/repos/:id/pulls/:pr_id/merge", handlers.MergePullRequest)
 
 	// Commit routes
 	protected.Get("/repos/:id/commits", handlers.ListCommits)
@@ -51,6 +57,9 @@ func Setup(app *fiber.App, db *database.DB, cfg *config.Config) {
 	// File browser routes
 	protected.Get("/repos/:id/files/*", handlers.BrowseFiles)
 	protected.Get("/repos/:id/blob/*", handlers.GetFileContent)
+
+	// ---- Internal hooks (called by git-server) ----
+	app.Post("/internal/hooks/pre-receive", handlers.PreReceiveHook)
 
 	// ---- Static file serving for the web UI ----
 	app.Static("/", "./ui/dist", fiber.Static{

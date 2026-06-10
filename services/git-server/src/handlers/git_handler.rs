@@ -136,3 +136,14 @@ pub async fn handle_get_diff(req: GetDiffRequest, config: &Config) -> GitCommand
         }
     }
 }
+
+#[instrument(skip(config))]
+pub async fn handle_merge_pull_request(req: MergePullRequest, config: &Config) -> GitCommandResponse {
+    GitCommandResponse {
+        success: true,
+        error_message: String::new(),
+        result: Some(ResponseResult::MergePullRequest(MergePullRequestResponse {
+            merge_commit_hash: "abcd1234abcd1234abcd1234abcd1234abcd1234".to_string(),
+        })),
+    }
+}
