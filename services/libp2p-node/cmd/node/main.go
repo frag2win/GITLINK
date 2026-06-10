@@ -1,9 +1,4 @@
 // Package main is the entry point for the libp2p-node service.
-//
-// It loads the peer identity key, creates a go-libp2p host with TCP
-// transport, Noise security, and Yamux multiplexing, starts mDNS for
-// local peer discovery, and registers stream handlers for the Git
-// protocol.
 package main
 
 import (
@@ -17,13 +12,19 @@ import (
 	"github.com/localrepo/libp2p-node/internal/discovery"
 	"github.com/localrepo/libp2p-node/internal/host"
 	"github.com/localrepo/libp2p-node/internal/identity"
+	"github.com/localrepo/libp2p-node/internal/nat"
 	"github.com/localrepo/libp2p-node/internal/protocol"
+	"github.com/localrepo/libp2p-node/internal/proxy"
+	"github.com/localrepo/libp2p-node/internal/queue"
+	"github.com/localrepo/libp2p-node/internal/relay"
 	"github.com/localrepo/libp2p-node/internal/socket"
 )
 
 func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
+	queue.Init()
 
 	// ---- Load configuration ----
 	cfg, err := config.Load()
@@ -52,7 +53,7 @@ func main() {
 	// ---- API socket client (to communicate with api-server) ----
 	apiClient := socket.NewAPIClient(cfg.SocketPath)
 
-	// ---- Register Git protocol stream handler ----
+	// ---- Register Git protocol stream handler (Handles INCOMING git clones) ----
 	protoHandler := protocol.NewHandler(apiClient)
 	h.SetStreamHandler(protocol.GitProtocolID, protoHandler.HandleStream)
 
@@ -65,15 +66,45 @@ func main() {
 		log.Println("mDNS discovery active")
 	}
 
-	// ---- Phase 2 stubs: DHT, AutoNAT, Hole Punching, Relay ----
-	// These will be activated in Phase 2 for internet-wide connectivity.
-	// See internal/discovery/dht.go, internal/nat/, internal/relay/.
+	// ---- Phase 2: Kademlia DHT ----
+	// Provide the repository CIDs to the DHT (example bootstrap nodes would go here)
+	dhtService, err := discovery.NewDHT(ctx, h, []string{
+		// "/ip4/104.131.131.82/tcp/4001/p2p/QmaCpDMGvV2BGHeYERUEnRQAwe3N8SzbUtfsmvsqQLuvuJ", // standard IPFS bootstrapper
+	})
+	if err != nil {
+		log.Printf("WARNING: DHT failed to initialize: %v", err)
+	} else {
+		defer dhtService.Close()
+		log.Println("DHT active")
+	}
+
+	// ---- Phase 2: NAT Traversal (AutoNAT, HolePunch, Relay) ----
+	autoNATService, _ := nat.NewAutoNAT(ctx, h)
+	_ = autoNATService // runs in background
+	
+	holePuncher, _ := nat.NewHolePuncher(ctx, h)
+	_ = holePuncher
+
+	relayService, _ := relay.NewRelay(ctx, h, []string{})
+	defer relayService.Close()
+
+	// ---- Start Local Git Proxy (Handles OUTGOING git clones) ----
+	proxyServer := proxy.NewServer(h)
+	go func() {
+		proxyPort := os.Getenv("PROXY_PORT")
+		if proxyPort == "" {
+			proxyPort = "4000"
+		}
+		if err := proxyServer.Start("0.0.0.0:" + proxyPort); err != nil {
+			log.Printf("local proxy server failed: %v", err)
+		}
+	}()
 
 	// ---- Wait for shutdown signal ----
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 
-	log.Println("shutting down libp2p-node…")
+	log.Println("shutting down libp2p-node...")
 	cancel()
 }

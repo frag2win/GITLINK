@@ -1,21 +1,14 @@
-// Package nat provides NAT traversal utilities for the libp2p-node.
 package nat
 
 import (
 	"context"
 	"fmt"
+	"log"
 
+	"github.com/libp2p/go-libp2p/core/event"
 	"github.com/libp2p/go-libp2p/core/host"
+	"github.com/libp2p/go-libp2p/core/network"
 )
-
-// ===========================================================
-// Phase 2 — AutoNAT service for NAT type detection.
-//
-// AutoNAT uses external peers to determine whether this node is
-// behind a NAT and what type of NAT it is (full-cone, symmetric,
-// etc.). This information is used to decide whether hole punching
-// is possible or a relay is needed.
-// ===========================================================
 
 // NATStatus represents the detected NAT type.
 type NATStatus int
@@ -38,19 +31,51 @@ func (s NATStatus) String() string {
 	}
 }
 
-// AutoNAT wraps the libp2p AutoNAT service.
+// AutoNAT wraps the libp2p AutoNAT service reachability subscription.
 type AutoNAT struct {
 	host   host.Host
 	status NATStatus
 }
 
-// NewAutoNAT creates and starts the AutoNAT service.
+// NewAutoNAT creates and starts listening for NAT reachability events.
+// The actual AutoNAT service is enabled in the libp2p host constructor.
 func NewAutoNAT(ctx context.Context, h host.Host) (*AutoNAT, error) {
-	// TODO [Phase 2]: Enable AutoNAT via libp2p.EnableNATService() option.
-	// TODO [Phase 2]: Subscribe to reachability change events.
-	// TODO [Phase 2]: Update a.status when events fire.
+	sub, err := h.EventBus().Subscribe(new(event.EvtLocalReachabilityChanged))
+	if err != nil {
+		return nil, fmt.Errorf("failed to subscribe to reachability events: %w", err)
+	}
 
-	return nil, fmt.Errorf("AutoNAT not implemented — Phase 2 feature")
+	an := &AutoNAT{
+		host:   h,
+		status: NATUnknown,
+	}
+
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case e, ok := <-sub.Out():
+				if !ok {
+					return
+				}
+				evt := e.(event.EvtLocalReachabilityChanged)
+				switch evt.Reachability {
+				case network.ReachabilityPublic:
+					an.status = NATPublic
+					log.Println("AutoNAT: Node is reachable from the public internet (Public NAT).")
+				case network.ReachabilityPrivate:
+					an.status = NATPrivate
+					log.Println("AutoNAT: Node is NOT reachable from the public internet (Private NAT).")
+				case network.ReachabilityUnknown:
+					an.status = NATUnknown
+					log.Println("AutoNAT: Node reachability is unknown.")
+				}
+			}
+		}
+	}()
+
+	return an, nil
 }
 
 // Status returns the currently detected NAT status.
