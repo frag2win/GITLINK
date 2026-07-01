@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { mergePullRequest } from '@/api/pulls';
 import type { PullRequest } from '@/types';
 

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useApi } from '@/hooks/useApi';
 import { listPullRequests } from '@/api/pulls';
 import type { PullRequest, Branch } from '@/types';
@@ -15,7 +15,7 @@ export default function PullRequestList({ repoName, branches }: PullRequestListP
   const [view, setView] = useState<'list' | 'create' | 'detail'>('list');
   const [selectedPR, setSelectedPR] = useState<PullRequest | null>(null);
 
-  const { data: prs, loading, mutate } = useApi<PullRequest[]>(
+  const { data: prs, loading, refetch } = useApi<PullRequest[]>(
     () => listPullRequests(repoName),
     [repoName, view]
   );
@@ -28,7 +28,7 @@ export default function PullRequestList({ repoName, branches }: PullRequestListP
         onCancel={() => setView('list')}
         onCreated={() => {
           setView('list');
-          mutate();
+          refetch();
         }}
       />
     );
@@ -42,7 +42,7 @@ export default function PullRequestList({ repoName, branches }: PullRequestListP
         onBack={() => {
           setSelectedPR(null);
           setView('list');
-          mutate();
+          refetch();
         }}
       />
     );

@@ -19,16 +19,16 @@ func SetupLogger(app *fiber.App) {
 		err := c.Next()
 
 		latency := time.Since(start)
-		peerID := PeerIDFromContext(c)
+		userID := UserIDFromContext(c)
 
 		log.Printf(
-			"[%s] %s %s — %d (%s) peer=%s",
+			"[%s] %s %s — %d (%s) user=%d",
 			time.Now().Format(time.RFC3339),
 			c.Method(),
 			c.Path(),
 			c.Response().StatusCode(),
 			latency.Round(time.Microsecond),
-			peerID,
+			userID,
 		)
 
 		return err

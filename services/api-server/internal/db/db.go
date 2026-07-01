@@ -14,9 +14,28 @@ var DB *gorm.DB
 // User represents a user account
 type User struct {
 	gorm.Model
-	Username string `gorm:"uniqueIndex;not null"`
-	Email    string `gorm:"uniqueIndex;not null"`
-	PeerID   string `gorm:"uniqueIndex;not null"` // Link to libp2p identity
+	Username     string `gorm:"uniqueIndex;not null"`
+	Email        string `gorm:"uniqueIndex;not null"`
+	PasswordHash string `gorm:"not null;default:''"`
+	PeerID       string `gorm:"uniqueIndex;not null"` // Link to libp2p identity
+	SSHKeys      []SSHKey
+}
+
+// SSHKey represents a user's public SSH key for Git authentication.
+type SSHKey struct {
+	gorm.Model
+	UserID      uint   `gorm:"not null;index"`
+	Name        string `gorm:"not null"`
+	PublicKey   string `gorm:"type:text;not null"`
+	Fingerprint string `gorm:"uniqueIndex;not null"`
+}
+
+// RepositoryCollaborator links a User to a Repository with a specific role.
+type RepositoryCollaborator struct {
+	gorm.Model
+	UserID       uint   `gorm:"not null;index"`
+	RepositoryID uint   `gorm:"not null;index"`
+	Role         string `gorm:"not null"` // "owner", "admin", "write", "read"
 }
 
 // Repository represents a git repository managed by the platform
@@ -68,7 +87,7 @@ func Init() error {
 	log.Println("Connected to PostgreSQL successfully")
 
 	// Auto Migrate the schemas
-	err = db.AutoMigrate(&User{}, &Repository{}, &BranchProtection{}, &PullRequest{})
+	err = db.AutoMigrate(&User{}, &SSHKey{}, &RepositoryCollaborator{}, &Repository{}, &BranchProtection{}, &PullRequest{})
 	if err != nil {
 		return err
 	}

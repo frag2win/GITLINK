@@ -1,48 +1,121 @@
 package handlers
 
 import (
+	"os"
+	"time"
+
 	"github.com/gofiber/fiber/v2"
+	"github.com/golang-jwt/jwt/v5"
+	models "github.com/localrepo/api-server/internal/db"
+	"golang.org/x/crypto/bcrypt"
 )
 
-// AuthRequest represents the body of an authentication request.
-type AuthRequest struct {
-	// PublicKey is the SSH public key in authorized_keys format
-	// (e.g. "ssh-ed25519 AAAA... user@host").
-	PublicKey string `json:"publicKey"`
+var jwtSecret = []byte(os.Getenv("JWT_SECRET"))
 
-	// Signature is a cryptographic signature proving possession of
-	// the corresponding private key.
-	Signature string `json:"signature"`
-
-	// Challenge is the nonce that was signed.
-	Challenge string `json:"challenge"`
+func init() {
+	if len(jwtSecret) == 0 {
+		jwtSecret = []byte("super-secret-key-change-in-prod")
+	}
 }
 
-// AuthResponse is returned on successful authentication.
-type AuthResponse struct {
-	// PeerID is the libp2p peer ID derived from the public key.
-	PeerID string `json:"peerID"`
-
-	// Token is a short-lived session token for subsequent API calls.
-	Token string `json:"token"`
-
-	// ExpiresAt is the UNIX timestamp when the token expires.
-	ExpiresAt int64 `json:"expiresAt"`
+// RegisterRequest holds data for registering a user
+type RegisterRequest struct {
+	Username string `json:"username"`
+	Email    string `json:"email"`
+	Password string `json:"password"`
 }
 
-// Authenticate verifies an SSH-key-based identity and returns a session token.
-//
-//	POST /api/v1/auth
-//	Body: AuthRequest
-func Authenticate(c *fiber.Ctx) error {
-	// TODO: Parse and validate AuthRequest body.
-	// TODO: Verify the signature against the public key and challenge.
-	// TODO: Look up or register the contributor by public key.
-	// TODO: Generate a short-lived session token.
-	// TODO: Log audit event for authentication.
-	// TODO: Return AuthResponse with token.
+// LoginRequest holds data for logging in
+type LoginRequest struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
 
-	return c.Status(fiber.StatusNotImplemented).JSON(fiber.Map{
-		"error": "Authenticate not implemented",
+// Register creates a new user
+func Register(c *fiber.Ctx) error {
+	var req RegisterRequest
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid request body"})
+	}
+
+	if req.Username == "" || req.Email == "" || len(req.Password) < 6 {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid fields (password must be >= 6 chars)"})
+	}
+
+	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Could not hash password"})
+	}
+
+	user := models.User{
+		Username:     req.Username,
+		Email:        req.Email,
+		PasswordHash: string(hash),
+		PeerID:       req.Username + "-peer", // Placeholder for actual p2p identity mapping if needed
+	}
+
+	if err := models.DB.Create(&user).Error; err != nil {
+		return c.Status(fiber.StatusConflict).JSON(fiber.Map{"error": "Username or email already exists"})
+	}
+
+	return c.Status(fiber.StatusCreated).JSON(fiber.Map{"message": "User registered successfully"})
+}
+
+// Login authenticates a user and returns a JWT
+func Login(c *fiber.Ctx) error {
+	var req LoginRequest
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid request body"})
+	}
+
+	var user models.User
+	if err := models.DB.Where("username = ?", req.Username).First(&user).Error; err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "Invalid username or password"})
+	}
+
+	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)); err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "Invalid username or password"})
+	}
+
+	// Create JWT token
+	claims := jwt.MapClaims{
+		"sub":      user.ID,
+		"username": user.Username,
+		"exp":      time.Now().Add(time.Hour * 72).Unix(),
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	t, err := token.SignedString(jwtSecret)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Could not generate token"})
+	}
+
+	return c.JSON(fiber.Map{
+		"token": t,
+		"user": fiber.Map{
+			"id":       user.ID,
+			"username": user.Username,
+			"email":    user.Email,
+		},
+	})
+}
+
+// GetMe returns the currently authenticated user
+func GetMe(c *fiber.Ctx) error {
+	userID := c.Locals("userID")
+	if userID == nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "Unauthorized"})
+	}
+
+	var user models.User
+	if err := models.DB.First(&user, userID).Error; err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "User not found"})
+	}
+
+	return c.JSON(fiber.Map{
+		"id":       user.ID,
+		"username": user.Username,
+		"email":    user.Email,
+		"peer_id":  user.PeerID,
 	})
 }

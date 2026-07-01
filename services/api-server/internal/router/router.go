@@ -21,11 +21,17 @@ func Setup(app *fiber.App, db *database.DB, cfg *config.Config) {
 	})
 
 	// Auth routes (public)
-	api.Post("/auth", handlers.Authenticate)
-	api.Post("/contributors", handlers.CreateGlobalContributor)
+	api.Post("/auth/register", handlers.Register)
+	api.Post("/auth/login", handlers.Login)
 
-	// Protected routes — require valid peer identity
+	// Protected routes — require valid JWT
 	protected := api.Group("", middleware.Auth())
+
+	// Authenticated User info & keys
+	protected.Get("/auth/me", handlers.GetMe)
+	protected.Post("/user/keys", handlers.AddSSHKey)
+	protected.Get("/user/keys", handlers.ListSSHKeys)
+	protected.Delete("/user/keys/:id", handlers.DeleteSSHKey)
 
 	// Repository routes
 	protected.Get("/repos", handlers.ListRepos)
