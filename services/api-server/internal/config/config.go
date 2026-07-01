@@ -19,6 +19,9 @@ type Config struct {
 	// ReposPath is the root directory where bare Git repositories are stored.
 	ReposPath string
 
+	// SSHPort is the port the SSH server listens on (default "2222").
+	SSHPort string
+
 	// GitSocketPath is the Unix domain socket path for the git-server sidecar.
 	GitSocketPath string
 
@@ -35,6 +38,7 @@ func Load() (*Config, error) {
 		Port:          envOrDefault("API_PORT", "3000"),
 		DBUrl:         envOrDefault("API_DB_URL", ""),
 		ReposPath:     envOrDefault("API_REPOS_PATH", "./repos"),
+		SSHPort:       envOrDefault("API_SSH_PORT", "2222"),
 		GitSocketPath: envOrDefault("API_GIT_SOCKET", "/tmp/git-server.sock"),
 		P2PSocketPath: envOrDefault("API_P2P_SOCKET", "/tmp/libp2p-node.sock"),
 		LogLevel:      envOrDefault("API_LOG_LEVEL", "info"),

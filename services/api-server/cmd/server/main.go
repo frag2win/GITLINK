@@ -20,6 +20,7 @@ import (
 	"github.com/localrepo/api-server/internal/middleware"
 	"github.com/localrepo/api-server/internal/router"
 	"github.com/localrepo/api-server/internal/socket"
+	"github.com/localrepo/api-server/internal/ssh"
 )
 
 func main() {
@@ -56,6 +57,13 @@ func main() {
 
 	// ---- Register routes ----
 	router.Setup(app, db, cfg)
+
+	// ---- Start SSH Server ----
+	go func() {
+		if err := ssh.Start(cfg); err != nil {
+			log.Fatalf("ssh server error: %v", err)
+		}
+	}()
 
 	// ---- Graceful shutdown ----
 	quit := make(chan os.Signal, 1)
