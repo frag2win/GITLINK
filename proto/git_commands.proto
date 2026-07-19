@@ -8,28 +8,42 @@ option go_package = "github.com/localrepo/api-server/proto/generated;pb";
 // Request/Response Envelopes
 // ---------------------------------------------------------------------------
 
+message GitError {
+  string code = 1;
+  string message = 2;
+}
+
 message GitCommandRequest {
+  int32 protocol_version = 1; // Used for forward compatibility
+
   oneof command {
-    CreateRepoRequest create_repo = 1;
-    DeleteRepoRequest delete_repo = 2;
-    ListReposRequest list_repos = 3;
-    PushRequest push = 4;
-    PullRequest pull = 5;
-    ListCommitsRequest list_commits = 6;
-    GetCommitRequest get_commit = 7;
-    GetDiffRequest get_diff = 8;
-    GetFileRequest get_file = 9;
-    GetTreeRequest get_tree = 10;
-    InfoRefsRequest info_refs = 11;
-    UploadPackRequest upload_pack = 12;
-    ReceivePackRequest receive_pack = 13;
-    MergePullRequest merge_pull_request = 14;
+    CreateRepoRequest create_repo = 2;
+    DeleteRepoRequest delete_repo = 3;
+    ListReposRequest list_repos = 4;
+    PushRequest push = 5;
+    PullRequest pull = 6;
+    ListCommitsRequest list_commits = 7;
+    GetCommitRequest get_commit = 8;
+    GetDiffRequest get_diff = 9;
+    GetFileRequest get_file = 10;
+    GetTreeRequest get_tree = 11;
+    InfoRefsRequest info_refs = 12;
+    UploadPackRequest upload_pack = 13;
+    ReceivePackRequest receive_pack = 14;
+    MergePullRequest merge_pull_request = 15;
+    CreateBranchRequest create_branch = 16;
+    DeleteBranchRequest delete_branch = 17;
+    ListBranchesRequest list_branches = 18;
+    GetBranchRequest get_branch = 19;
+    CreateTagRequest create_tag = 20;
+    DeleteTagRequest delete_tag = 21;
+    ListTagsRequest list_tags = 22;
   }
 }
 
 message GitCommandResponse {
-  bool success = 1;
-  string error_message = 2;
+  int32 protocol_version = 1;
+  GitError error = 2; // Populated if the operation failed
 
   oneof result {
     CreateRepoResponse create_repo = 3;
@@ -46,6 +60,13 @@ message GitCommandResponse {
     UploadPackResponse upload_pack = 14;
     ReceivePackResponse receive_pack = 15;
     MergePullRequestResponse merge_pull_request = 16;
+    CreateBranchResponse create_branch = 17;
+    DeleteBranchResponse delete_branch = 18;
+    ListBranchesResponse list_branches = 19;
+    GetBranchResponse get_branch = 20;
+    CreateTagResponse create_tag = 21;
+    DeleteTagResponse delete_tag = 22;
+    ListTagsResponse list_tags = 23;
   }
 }
 
@@ -226,7 +247,105 @@ message MergePullRequest {
   string commit_message = 6;
 }
 
-message MergePullRequestResponse {
-  string merge_commit_hash = 1;
+message MergeConflict {
+  string path = 1;
+  string conflict_type = 2;
+  string base_oid = 3;
+  string ours_oid = 4;
+  string theirs_oid = 5;
+  bool is_binary = 6;
 }
 
+message MergeConflictList {
+  repeated MergeConflict conflicts = 1;
+}
+
+message MergePullRequestResponse {
+  oneof outcome {
+    string merge_commit_hash = 1;
+    MergeConflictList conflicts = 2;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Branches & Tags
+// ---------------------------------------------------------------------------
+
+message BranchInfo {
+  string name = 1;
+  bool is_head = 2;
+  string commit_id = 3;
+  string commit_summary = 4;
+  string committed_at = 5;
+}
+
+message CreateBranchRequest {
+  string repo_name = 1;
+  string branch_name = 2;
+  string target_commit_id = 3;
+}
+
+message CreateBranchResponse {
+  BranchInfo branch = 1;
+}
+
+message DeleteBranchRequest {
+  string repo_name = 1;
+  string branch_name = 2;
+}
+
+message DeleteBranchResponse {}
+
+message ListBranchesRequest {
+  string repo_name = 1;
+}
+
+message ListBranchesResponse {
+  repeated BranchInfo branches = 1;
+}
+
+message GetBranchRequest {
+  string repo_name = 1;
+  string branch_name = 2;
+}
+
+message GetBranchResponse {
+  BranchInfo branch = 1;
+}
+
+message TagInfo {
+  string name = 1;
+  string target_id = 2;
+  bool is_annotated = 3;
+  string message = 4;
+  string tagger_name = 5;
+  string tagged_at = 6;
+}
+
+message CreateTagRequest {
+  string repo_name = 1;
+  string tag_name = 2;
+  string target_commit_id = 3;
+  string message = 4;
+  string tagger_name = 5;
+  string tagger_email = 6;
+}
+
+message CreateTagResponse {
+  TagInfo tag = 1;
+}
+
+message DeleteTagRequest {
+  string repo_name = 1;
+  string tag_name = 2;
+}
+
+message DeleteTagResponse {}
+
+message ListTagsRequest {
+  string repo_name = 1;
+}
+
+message ListTagsResponse {
+  repeated TagInfo tags = 1;
+}
