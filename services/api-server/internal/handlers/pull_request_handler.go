@@ -1,17 +1,99 @@
 package handlers
 
 import (
+	"errors"
+	"strconv"
+
 	"github.com/gofiber/fiber/v2"
-	"github.com/localrepo/api-server/internal/database"
-	pb "github.com/localrepo/api-server/proto/generated"
+	"github.com/localrepo/api-server/internal/middleware"
+	"github.com/localrepo/api-server/internal/models"
+	"github.com/localrepo/api-server/internal/service"
+	"gorm.io/gorm"
 )
 
-// CreatePullRequest creates a new PR.
-//
-//	POST /api/v1/repos/:id/pulls
-//	Body: { "title": "...", "description": "...", "baseBranch": "main", "headBranch": "feature" }
-func CreatePullRequest(c *fiber.Ctx) error {
-	repoID := c.Params("id")
+type PullRequestHandler struct {
+	pullSvc     service.PullRequestService
+	repoService service.RepoService
+}
+
+func NewPullRequestHandler(pullSvc service.PullRequestService, repoService service.RepoService) *PullRequestHandler {
+	return &PullRequestHandler{
+		pullSvc:     pullSvc,
+		repoService: repoService,
+	}
+}
+
+func (h *PullRequestHandler) getAuthorizedRepo(c *fiber.Ctx) (*models.Repository, error) {
+	userID := middleware.UserIDFromContext(c)
+	if userID == 0 {
+		return nil, c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "Unauthorized"})
+	}
+
+	repoIDStr := c.Params("id")
+	var repo *models.Repository
+	var err error
+	if id, errParse := strconv.ParseUint(repoIDStr, 10, 32); errParse == nil {
+		repo, err = h.repoService.GetRepoByID(c.Context(), uint(id))
+	} else {
+		repo, err = h.repoService.GetRepoByName(c.Context(), repoIDStr)
+	}
+
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Repository not found"})
+		}
+		return nil, c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	return repo, nil
+}
+
+type PullRequestDTO struct {
+	ID          uint   `json:"id"`
+	Title       string `json:"title"`
+	Description string `json:"description"`
+	BaseBranch  string `json:"baseBranch"`
+	HeadBranch  string `json:"headBranch"`
+	Status      string `json:"status"` // open, merged, closed
+	AuthorName  string `json:"authorName"`
+	CreatedAt   string `json:"createdAt"`
+}
+
+func (h *PullRequestHandler) ListPullRequests(c *fiber.Ctx) error {
+	repo, err := h.getAuthorizedRepo(c)
+	if err != nil {
+		return err
+	}
+
+	prs, err := h.pullSvc.ListPullRequests(c.Context(), repo.ID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	dtos := make([]PullRequestDTO, len(prs))
+	for i, pr := range prs {
+		dtos[i] = PullRequestDTO{
+			ID:          pr.ID,
+			Title:       pr.Title,
+			Description: pr.Description,
+			BaseBranch:  pr.BaseBranch,
+			HeadBranch:  pr.HeadBranch,
+			Status:      pr.Status,
+			AuthorName:  pr.Author.Username,
+			CreatedAt:   pr.CreatedAt.Format("2006-01-02T15:04:05Z"),
+		}
+	}
+
+	return c.JSON(dtos)
+}
+
+func (h *PullRequestHandler) CreatePullRequest(c *fiber.Ctx) error {
+	repo, err := h.getAuthorizedRepo(c)
+	if err != nil {
+		return err
+	}
+
+	userID := middleware.UserIDFromContext(c)
 
 	var req struct {
 		Title       string `json:"title"`
@@ -20,86 +102,56 @@ func CreatePullRequest(c *fiber.Ctx) error {
 		HeadBranch  string `json:"headBranch"`
 	}
 	if err := c.BodyParser(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid body"})
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid request body"})
 	}
 
-	var repo database.Repository
-	if err := db.Conn.First(&repo, repoID).Error; err != nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "repository not found"})
-	}
-
-	pr := database.PullRequest{
+	pr := &models.PullRequest{
 		RepositoryID: repo.ID,
+		AuthorID:     userID,
 		Title:        req.Title,
 		Description:  req.Description,
 		BaseBranch:   req.BaseBranch,
 		HeadBranch:   req.HeadBranch,
-		Status:       "open",
 	}
 
-	if err := db.Conn.Create(&pr).Error; err != nil {
+	if err := h.pullSvc.CreatePullRequest(c.Context(), pr); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
 	}
 
-	return c.Status(fiber.StatusCreated).JSON(pr)
+	username, _ := c.Locals("username").(string)
+
+	dto := PullRequestDTO{
+		ID:          pr.ID,
+		Title:       pr.Title,
+		Description: pr.Description,
+		BaseBranch:  pr.BaseBranch,
+		HeadBranch:  pr.HeadBranch,
+		Status:      pr.Status,
+		AuthorName:  username,
+		CreatedAt:   pr.CreatedAt.Format("2006-01-02T15:04:05Z"),
+	}
+
+	return c.Status(fiber.StatusCreated).JSON(dto)
 }
 
-// ListPullRequests lists PRs for a repo.
-//
-//	GET /api/v1/repos/:id/pulls
-func ListPullRequests(c *fiber.Ctx) error {
-	repoID := c.Params("id")
-
-	var prs []database.PullRequest
-	if err := db.Conn.Where("repository_id = ?", repoID).Find(&prs).Error; err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+func (h *PullRequestHandler) MergePullRequest(c *fiber.Ctx) error {
+	repo, err := h.getAuthorizedRepo(c)
+	if err != nil {
+		return err
 	}
 
-	return c.JSON(prs)
-}
-
-// MergePullRequest merges an open PR.
-//
-//	POST /api/v1/repos/:id/pulls/:pr_id/merge
-func MergePullRequest(c *fiber.Ctx) error {
-	repoID := c.Params("id")
-	prID := c.Params("pr_id")
-
-	var repo database.Repository
-	if err := db.Conn.First(&repo, repoID).Error; err != nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "repository not found"})
+	prIDStr := c.Params("pr_id")
+	prID, err := strconv.ParseUint(prIDStr, 10, 32)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid PR ID"})
 	}
 
-	var pr database.PullRequest
-	if err := db.Conn.First(&pr, prID).Error; err != nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "PR not found"})
-	}
+	username, _ := c.Locals("username").(string)
 
-	if pr.Status != "open" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "PR is not open"})
-	}
-
-	// Trigger Rust backend
-	req := &pb.MergePullRequest{
-		RepoName:      repo.Name,
-		BaseBranch:    pr.BaseBranch,
-		HeadBranch:    pr.HeadBranch,
-		AuthorName:    "System",
-		AuthorEmail:   "system@p2p.local",
-		CommitMessage: "Merge pull request #" + prID + " from " + pr.HeadBranch,
-	}
-
-	hash, err := gitClient.MergePullRequest(c.Context(), req)
+	commitHash, err := h.pullSvc.MergePullRequest(c.Context(), uint(prID), repo.Name, username, username+"@gitlink.local")
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
 	}
 
-	// Update PR status
-	pr.Status = "merged"
-	db.Conn.Save(&pr)
-
-	return c.JSON(fiber.Map{
-		"status": "merged",
-		"hash":   hash,
-	})
+	return c.JSON(fiber.Map{"status": "merged", "mergeCommitHash": commitHash})
 }
