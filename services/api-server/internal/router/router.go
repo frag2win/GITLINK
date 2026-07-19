@@ -1,71 +1,80 @@
-// Package router wires up all Fiber routes and handler groups.
 package router
 
 import (
 	"github.com/gofiber/fiber/v2"
 
 	"github.com/localrepo/api-server/internal/config"
-	"github.com/localrepo/api-server/internal/database"
 	"github.com/localrepo/api-server/internal/handlers"
 	"github.com/localrepo/api-server/internal/middleware"
 )
 
-// Setup registers all API route groups and static file serving on the
-// given Fiber app.
-func Setup(app *fiber.App, db *database.DB, cfg *config.Config) {
-	// ---- API v1 route group ----
+// Handlers holds all the dependencies required for routing
+type Handlers struct {
+	Auth        *handlers.AuthHandler
+	SSH         *handlers.SSHHandler
+	Repo        *handlers.RepoHandler
+	Branch      *handlers.BranchHandler
+	Pull        *handlers.PullRequestHandler
+	Commit      *handlers.CommitHandler
+	File        *handlers.FileHandler
+	Contributor *handlers.ContributorHandler
+	Health      *handlers.HealthHandler
+	GitHTTP     *handlers.GitHTTPHandler
+}
+
+// Setup registers all API route groups and static file serving on the given Fiber app.
+func Setup(app *fiber.App, h *Handlers, cfg *config.Config) {
 	api := app.Group("/api/v1")
 
-	app.Get("/health", func(c *fiber.Ctx) error {
-		return c.SendString("OK")
-	})
+	// Health endpoints
+	app.Get("/health", h.Health.CheckHealth)
+	app.Get("/ready", h.Health.CheckHealth)
+	app.Get("/live", h.Health.CheckHealth)
 
 	// Auth routes (public)
-	api.Post("/auth/register", handlers.Register)
-	api.Post("/auth/login", handlers.Login)
+	api.Post("/auth/register", h.Auth.Register)
+	api.Post("/auth/login", h.Auth.Login)
 
 	// Protected routes — require valid JWT
-	protected := api.Group("", middleware.Auth())
+	protected := api.Group("", middleware.Auth(cfg.JWTSecret))
 
 	// Authenticated User info & keys
-	protected.Get("/auth/me", handlers.GetMe)
-	protected.Post("/user/keys", handlers.AddSSHKey)
-	protected.Get("/user/keys", handlers.ListSSHKeys)
-	protected.Delete("/user/keys/:id", handlers.DeleteSSHKey)
+	protected.Get("/auth/me", h.Auth.GetMe)
+	protected.Post("/user/keys", h.SSH.AddSSHKey)
+	protected.Get("/user/keys", h.SSH.ListSSHKeys)
+	protected.Delete("/user/keys/:id", h.SSH.DeleteSSHKey)
 
 	// Repository routes
-	protected.Get("/repos", handlers.ListRepos)
-	protected.Get("/repos/:id", handlers.GetRepo)
-	protected.Post("/repos", handlers.CreateRepo)
-	protected.Delete("/repos/:id", handlers.DeleteRepo)
+	protected.Get("/repos", h.Repo.ListRepos)
+	protected.Get("/repos/:id", h.Repo.GetRepo)
+	protected.Post("/repos", h.Repo.CreateRepo)
+	protected.Delete("/repos/:id", h.Repo.DeleteRepo)
 
 	// Branch routes
-	protected.Get("/repos/:id/branches", handlers.ListBranches)
-	protected.Get("/repos/:id/branches/:branch", handlers.GetBranch)
-	protected.Post("/repos/:id/branches", handlers.CreateBranch)
-	protected.Delete("/repos/:id/branches/:branch", handlers.DeleteBranch)
-	protected.Post("/repos/:id/branches/:branch/protect", handlers.ProtectBranch)
+	protected.Get("/repos/:id/branches", h.Branch.ListBranches)
+	protected.Get("/repos/:id/branches/:branch", h.Branch.GetBranch)
+	protected.Post("/repos/:id/branches", h.Branch.CreateBranch)
+	protected.Delete("/repos/:id/branches/:branch", h.Branch.DeleteBranch)
+	protected.Post("/repos/:id/branches/:branch/protect", h.Branch.ProtectBranch)
 
 	// Pull Request routes
-	protected.Get("/repos/:id/pulls", handlers.ListPullRequests)
-	protected.Post("/repos/:id/pulls", handlers.CreatePullRequest)
-	protected.Post("/repos/:id/pulls/:pr_id/merge", handlers.MergePullRequest)
+	protected.Get("/repos/:id/pulls", h.Pull.ListPullRequests)
+	protected.Post("/repos/:id/pulls", h.Pull.CreatePullRequest)
+	protected.Post("/repos/:id/pulls/:pr_id/merge", h.Pull.MergePullRequest)
 
 	// Commit routes
-	protected.Get("/repos/:id/commits", handlers.ListCommits)
-	protected.Get("/repos/:id/commits/:sha", handlers.GetCommit)
+	protected.Get("/repos/:id/commits", h.Commit.ListCommits)
+	protected.Get("/repos/:id/commits/:sha", h.Commit.GetCommit)
 
 	// Contributor routes
-	protected.Get("/repos/:id/contributors", handlers.ListContributors)
-	protected.Post("/repos/:id/contributors", handlers.AddContributor)
-	protected.Delete("/repos/:id/contributors/:peerId", handlers.RemoveContributor)
+	protected.Get("/repos/:id/contributors", h.Contributor.ListContributors)
+	protected.Post("/repos/:id/contributors", h.Contributor.AddContributor)
+	protected.Delete("/repos/:id/contributors/:peerId", h.Contributor.RemoveContributor)
 
 	// File browser routes
-	protected.Get("/repos/:id/files/*", handlers.BrowseFiles)
-	protected.Get("/repos/:id/blob/*", handlers.GetFileContent)
-
-	// ---- Internal hooks (called by git-server) ----
-	app.Post("/internal/hooks/pre-receive", handlers.PreReceiveHook)
+	protected.Get("/repos/:id/files", h.File.BrowseFiles)
+	protected.Get("/repos/:id/files/*", h.File.BrowseFiles)
+	protected.Get("/repos/:id/blob/*", h.File.GetFileContent)
 
 	// ---- Static file serving for the web UI ----
 	app.Static("/", "./ui/dist", fiber.Static{
@@ -74,9 +83,9 @@ func Setup(app *fiber.App, db *database.DB, cfg *config.Config) {
 	})
 
 	// Git Smart HTTP fallback routes
-	app.Get("/:repo/info/refs", handlers.InfoRefs)
-	app.Post("/:repo/git-upload-pack", handlers.UploadPack)
-	app.Post("/:repo/git-receive-pack", handlers.ReceivePack)
+	app.Get("/:repo/info/refs", h.GitHTTP.InfoRefs)
+	app.Post("/:repo/git-upload-pack", h.GitHTTP.UploadPack)
+	app.Post("/:repo/git-receive-pack", h.GitHTTP.ReceivePack)
 
 	// SPA fallback — serve index.html for any unmatched routes
 	app.Get("/*", func(c *fiber.Ctx) error {
