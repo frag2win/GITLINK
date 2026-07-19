@@ -4,10 +4,19 @@ import (
 	"fmt"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/localrepo/api-server/internal/service"
 )
 
+type GitHTTPHandler struct {
+	gitService service.GitService
+}
+
+func NewGitHTTPHandler(gitService service.GitService) *GitHTTPHandler {
+	return &GitHTTPHandler{gitService: gitService}
+}
+
 // InfoRefs handles: GET /:repo/info/refs?service=git-upload-pack
-func InfoRefs(c *fiber.Ctx) error {
+func (h *GitHTTPHandler) InfoRefs(c *fiber.Ctx) error {
 	repo := c.Params("repo")
 	service := c.Query("service")
 
@@ -18,7 +27,7 @@ func InfoRefs(c *fiber.Ctx) error {
 	c.Set("Content-Type", "application/x-"+service+"-advertisement")
 	c.Set("Cache-Control", "no-cache")
 
-	respBytes, err := gitClient.InfoRefs(c.Context(), repo, service)
+	respBytes, err := h.gitService.InfoRefs(c.Context(), repo, service)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).SendString(err.Error())
 	}
@@ -33,13 +42,13 @@ func InfoRefs(c *fiber.Ctx) error {
 }
 
 // UploadPack handles: POST /:repo/git-upload-pack
-func UploadPack(c *fiber.Ctx) error {
+func (h *GitHTTPHandler) UploadPack(c *fiber.Ctx) error {
 	repo := c.Params("repo")
 
 	c.Set("Content-Type", "application/x-git-upload-pack-result")
 	c.Set("Cache-Control", "no-cache")
 
-	respBytes, err := gitClient.UploadPack(c.Context(), repo, c.Body())
+	respBytes, err := h.gitService.UploadPack(c.Context(), repo, c.Body())
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).SendString(err.Error())
 	}
@@ -48,13 +57,13 @@ func UploadPack(c *fiber.Ctx) error {
 }
 
 // ReceivePack handles: POST /:repo/git-receive-pack
-func ReceivePack(c *fiber.Ctx) error {
+func (h *GitHTTPHandler) ReceivePack(c *fiber.Ctx) error {
 	repo := c.Params("repo")
 
 	c.Set("Content-Type", "application/x-git-receive-pack-result")
 	c.Set("Cache-Control", "no-cache")
 
-	respBytes, err := gitClient.ReceivePack(c.Context(), repo, c.Body())
+	respBytes, err := h.gitService.ReceivePack(c.Context(), repo, c.Body())
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).SendString(err.Error())
 	}
