@@ -3,7 +3,7 @@ package main
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
@@ -24,30 +24,33 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	queue.Init()
-
 	// ---- Load configuration ----
 	cfg, err := config.Load()
 	if err != nil {
-		log.Fatalf("failed to load config: %v", err)
+		slog.Error("failed to load config", "error", err)
+		os.Exit(1)
 	}
+
+	queue.Init(cfg.RabbitMQURL)
 
 	// ---- Load or generate peer identity ----
 	privKey, err := identity.LoadOrGenerate(cfg.IdentityKeyPath)
 	if err != nil {
-		log.Fatalf("failed to load identity: %v", err)
+		slog.Error("failed to load identity", "error", err)
+		os.Exit(1)
 	}
 
 	// ---- Create libp2p host ----
 	h, err := host.New(ctx, privKey, cfg.ListenAddrs)
 	if err != nil {
-		log.Fatalf("failed to create libp2p host: %v", err)
+		slog.Error("failed to create libp2p host", "error", err)
+		os.Exit(1)
 	}
 	defer h.Close()
 
-	log.Printf("libp2p host started: %s", h.ID())
+	slog.Info("libp2p host started", "id", h.ID())
 	for _, addr := range h.Addrs() {
-		log.Printf("  listening on: %s/p2p/%s", addr, h.ID())
+		slog.Info("listening on", "addr", addr.String()+"/p2p/"+h.ID().String())
 	}
 
 	// ---- API socket client (to communicate with api-server) ----
@@ -60,22 +63,20 @@ func main() {
 	// ---- Start mDNS discovery ----
 	mdns, err := discovery.NewMDNS(ctx, h)
 	if err != nil {
-		log.Printf("WARNING: mDNS discovery failed to start: %v", err)
+		slog.Warn("mDNS discovery failed to start", "error", err)
 	} else {
 		defer mdns.Close()
-		log.Println("mDNS discovery active")
+		slog.Info("mDNS discovery active")
 	}
 
 	// ---- Phase 2: Kademlia DHT ----
 	// Provide the repository CIDs to the DHT (example bootstrap nodes would go here)
-	dhtService, err := discovery.NewDHT(ctx, h, []string{
-		// "/ip4/104.131.131.82/tcp/4001/p2p/QmaCpDMGvV2BGHeYERUEnRQAwe3N8SzbUtfsmvsqQLuvuJ", // standard IPFS bootstrapper
-	})
+	dhtService, err := discovery.NewDHT(ctx, h, []string{})
 	if err != nil {
-		log.Printf("WARNING: DHT failed to initialize: %v", err)
+		slog.Warn("DHT failed to initialize", "error", err)
 	} else {
 		defer dhtService.Close()
-		log.Println("DHT active")
+		slog.Info("DHT active")
 	}
 
 	// ---- Phase 2: NAT Traversal (AutoNAT, HolePunch, Relay) ----
@@ -88,15 +89,11 @@ func main() {
 	relayService, _ := relay.NewRelay(ctx, h, []string{})
 	defer relayService.Close()
 
-	// ---- Start Local Git Proxy (Handles OUTGOING git clones) ----
+	// ---- Start Local Git Proxy (Handles OUTGOING git clones) via UDS ----
 	proxyServer := proxy.NewServer(h)
 	go func() {
-		proxyPort := os.Getenv("PROXY_PORT")
-		if proxyPort == "" {
-			proxyPort = "4000"
-		}
-		if err := proxyServer.Start("0.0.0.0:" + proxyPort); err != nil {
-			log.Printf("local proxy server failed: %v", err)
+		if err := proxyServer.Start(cfg.ProxySocket); err != nil {
+			slog.Error("local proxy server failed", "error", err)
 		}
 	}()
 
@@ -105,6 +102,6 @@ func main() {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 
-	log.Println("shutting down libp2p-node...")
+	slog.Info("shutting down libp2p-node...")
 	cancel()
 }
