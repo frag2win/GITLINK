@@ -17,13 +17,13 @@ pub async fn handle_info_refs(req: InfoRefsRequest, config: &Config) -> GitComma
 
     match http::info_refs(&path_str, &req.service) {
         Ok(output) => GitCommandResponse {
-            success: true,
-            error_message: String::new(),
+            protocol_version: 1, error: None,
+            
             result: Some(ResponseResult::InfoRefs(InfoRefsResponse { output })),
         },
         Err(e) => GitCommandResponse {
-            success: false,
-            error_message: e.to_string(),
+            protocol_version: 1,
+            error: Some(crate::socket::protocol::GitError { code: "GitError".to_string(), message: e.to_string() }),
             result: None,
         },
     }
@@ -40,13 +40,13 @@ pub async fn handle_upload_pack(req: UploadPackRequest, config: &Config) -> GitC
 
     match http::upload_pack(&path_str, &req.body) {
         Ok(output) => GitCommandResponse {
-            success: true,
-            error_message: String::new(),
+            protocol_version: 1, error: None,
+            
             result: Some(ResponseResult::UploadPack(UploadPackResponse { output })),
         },
         Err(e) => GitCommandResponse {
-            success: false,
-            error_message: e.to_string(),
+            protocol_version: 1,
+            error: Some(crate::socket::protocol::GitError { code: "GitError".to_string(), message: e.to_string() }),
             result: None,
         },
     }
@@ -63,13 +63,13 @@ pub async fn handle_receive_pack(req: ReceivePackRequest, config: &Config) -> Gi
 
     match http::receive_pack(&path_str, &req.body) {
         Ok(output) => GitCommandResponse {
-            success: true,
-            error_message: String::new(),
+            protocol_version: 1, error: None,
+            
             result: Some(ResponseResult::ReceivePack(ReceivePackResponse { output })),
         },
         Err(e) => GitCommandResponse {
-            success: false,
-            error_message: e.to_string(),
+            protocol_version: 1,
+            error: Some(crate::socket::protocol::GitError { code: "GitError".to_string(), message: e.to_string() }),
             result: None,
         },
     }
