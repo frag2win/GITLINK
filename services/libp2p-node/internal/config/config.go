@@ -24,6 +24,9 @@ type Config struct {
 	// SocketPath is the Unix domain socket path used to communicate
 	// with the api-server sidecar.
 	SocketPath string
+
+	ProxySocket string
+	RabbitMQURL string
 }
 
 // Load reads configuration from environment variables.
@@ -33,6 +36,8 @@ func Load() (*Config, error) {
 		ListenAddrs:     splitCSV(envOrDefault("P2P_LISTEN_ADDRS", "/ip4/0.0.0.0/tcp/4001")),
 		BootstrapPeers:  splitCSV(os.Getenv("P2P_BOOTSTRAP_PEERS")),
 		SocketPath:      envOrDefault("P2P_API_SOCKET", "/tmp/libp2p-node.sock"),
+		ProxySocket:     envOrDefault("PROXY_SOCKET", "/tmp/git-proxy.sock"),
+		RabbitMQURL:     envOrDefault("RABBITMQ_URL", "amqp://guest:guest@localhost:5672/"),
 	}
 
 	if err := cfg.validate(); err != nil {
