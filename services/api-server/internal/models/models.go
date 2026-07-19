@@ -1,15 +1,8 @@
-package db
+package models
 
 import (
-	"log"
-	"os"
-
-	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
-	"gorm.io/gorm/logger"
 )
-
-var DB *gorm.DB
 
 // User represents a user account
 type User struct {
@@ -45,6 +38,7 @@ type Repository struct {
 	Description string
 	OwnerID     uint
 	Owner       User `gorm:"foreignKey:OwnerID"`
+	IsPrivate   bool `gorm:"default:false"`
 }
 
 // BranchProtection represents protection rules for a specific branch
@@ -69,30 +63,11 @@ type PullRequest struct {
 	Status       string `gorm:"default:'open'"` // open, merged, closed
 }
 
-// Init initializes the database connection and auto-migrates schemas
-func Init() error {
-	dsn := os.Getenv("API_DB_URL")
-	if dsn == "" {
-		log.Println("API_DB_URL not set, skipping database initialization")
-		return nil
-	}
-
-	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
-		Logger: logger.Default.LogMode(logger.Info),
-	})
-	if err != nil {
-		return err
-	}
-
-	log.Println("Connected to PostgreSQL successfully")
-
-	// Auto Migrate the schemas
-	err = db.AutoMigrate(&User{}, &SSHKey{}, &RepositoryCollaborator{}, &Repository{}, &BranchProtection{}, &PullRequest{})
-	if err != nil {
-		return err
-	}
-
-	log.Println("Database schemas migrated successfully")
-	DB = db
-	return nil
+// AuditLog records an audit event.
+type AuditLog struct {
+	gorm.Model
+	PeerID    string
+	Operation string
+	RepoName  string
+	Details   string
 }
