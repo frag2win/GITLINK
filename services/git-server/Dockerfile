@@ -27,8 +27,9 @@ COPY services/git-server/build.rs ./
 RUN mkdir -p src && echo "fn main() {}" > src/main.rs
 RUN cargo build --release || true
 
-# Copy actual source code and rebuild
+# Copy actual source code, scripts, and rebuild
 COPY services/git-server/src/ src/
+COPY services/git-server/scripts/ scripts/
 RUN touch src/main.rs && touch build.rs && cargo build --release
 
 # =============================================================================

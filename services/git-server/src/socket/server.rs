@@ -12,6 +12,8 @@ use anyhow::{Context, Result};
 use futures::{SinkExt, StreamExt};
 use prost::Message;
 #[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
+#[cfg(unix)]
 use tokio::net::UnixStream;
 use tokio::net::TcpStream;
 
@@ -35,9 +37,8 @@ pub async fn start(config: Config) -> Result<()> {
             }
             
             let listener = tokio::net::UnixListener::bind(socket_path).context("failed to bind Unix domain socket")?;
-            std::os::unix::fs::PermissionsExt::set_mode(&mut std::fs::Permissions::from_mode(0o777), 0o777); // Simplified for now
-            // Just use a simpler permissions setter
-            std::fs::set_permissions(socket_path, std::os::unix::fs::PermissionsExt::from_mode(0o777))
+            
+            std::fs::set_permissions(socket_path, std::fs::Permissions::from_mode(0o777))
                 .context("failed to set socket permissions")?;
             
             info!(path = %config.ipc_address, "Socket server listening (Unix Protobuf)");
