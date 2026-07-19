@@ -13,6 +13,9 @@ mod handlers;
 mod models;
 mod socket;
 
+#[cfg(test)]
+mod tests;
+
 use anyhow::Result;
 use tracing::{info, error};
 
@@ -24,11 +27,12 @@ use tracing::{info, error};
 async fn main() -> Result<()> {
     // Initialize structured logging with the configured log level
     let cfg = config::Config::load();
+    cfg.validate().map_err(|e| anyhow::anyhow!("Configuration validation failed: {}", e))?;
     init_tracing(&cfg.log_level);
 
     info!(
         repos_path = %cfg.repos_path,
-        socket_path = %cfg.socket_path,
+        ipc_address = %cfg.ipc_address,
         "Starting git-server"
     );
 

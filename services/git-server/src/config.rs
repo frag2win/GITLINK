@@ -18,7 +18,8 @@ pub struct Config {
     pub repos_path: String,
 
     /// Filesystem path for the Unix domain socket file.
-    pub socket_path: String,
+    pub ipc_network: String,
+    pub ipc_address: String,
 
     /// Log level filter string (e.g. "debug", "info", "warn", "error").
     pub log_level: String,
@@ -28,7 +29,8 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             repos_path: "/repos".to_string(),
-            socket_path: "/socket/git.sock".to_string(),
+            ipc_network: "unix".to_string(),
+            ipc_address: "/socket/git.sock".to_string(),
             log_level: "info".to_string(),
         }
     }
@@ -47,8 +49,10 @@ impl Config {
         Self {
             repos_path: std::env::var("GIT_SERVER_REPOS_PATH")
                 .unwrap_or(defaults.repos_path),
-            socket_path: std::env::var("GIT_SERVER_SOCKET_PATH")
-                .unwrap_or(defaults.socket_path),
+            ipc_network: std::env::var("GIT_SERVER_IPC_NETWORK")
+                .unwrap_or(defaults.ipc_network),
+            ipc_address: std::env::var("GIT_SERVER_IPC_ADDRESS")
+                .unwrap_or(defaults.ipc_address),
             log_level: std::env::var("GIT_SERVER_LOG_LEVEL")
                 .unwrap_or(defaults.log_level),
         }
@@ -64,9 +68,9 @@ impl Config {
                 reason: "must not be empty".into(),
             });
         }
-        if self.socket_path.is_empty() {
+        if self.ipc_address.is_empty() {
             return Err(crate::error::ConfigError::InvalidValue {
-                field: "socket_path".into(),
+                field: "ipc_address".into(),
                 reason: "must not be empty".into(),
             });
         }
