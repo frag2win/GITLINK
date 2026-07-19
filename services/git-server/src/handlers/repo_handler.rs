@@ -25,14 +25,14 @@ pub async fn handle_create(req: CreateRepoRequest, config: &Config) -> GitComman
             };
             
             GitCommandResponse {
-                success: true,
-                error_message: String::new(),
+                protocol_version: 1, error: None,
+                
                 result: Some(ResponseResult::CreateRepo(CreateRepoResponse { repo: Some(info) })),
             }
         }
         Err(e) => GitCommandResponse {
-            success: false,
-            error_message: e.to_string(),
+            protocol_version: 1,
+            error: Some(crate::socket::protocol::GitError { code: "GitError".to_string(), message: e.to_string() }),
             result: None,
         }
     }
@@ -44,13 +44,13 @@ pub async fn handle_delete(req: DeleteRepoRequest, config: &Config) -> GitComman
     
     match crate::git::repository::delete_repo(repos_dir, &req.name) {
         Ok(_) => GitCommandResponse {
-            success: true,
-            error_message: String::new(),
+            protocol_version: 1, error: None,
+            
             result: Some(ResponseResult::DeleteRepo(DeleteRepoResponse {})),
         },
         Err(e) => GitCommandResponse {
-            success: false,
-            error_message: e.to_string(),
+            protocol_version: 1,
+            error: Some(crate::socket::protocol::GitError { code: "GitError".to_string(), message: e.to_string() }),
             result: None,
         }
     }
@@ -73,14 +73,14 @@ pub async fn handle_list(_req: ListReposRequest, config: &Config) -> GitCommandR
             }).collect();
             
             GitCommandResponse {
-                success: true,
-                error_message: String::new(),
+                protocol_version: 1, error: None,
+                
                 result: Some(ResponseResult::ListRepos(ListReposResponse { repos: proto_repos })),
             }
         }
         Err(e) => GitCommandResponse {
-            success: false,
-            error_message: e.to_string(),
+            protocol_version: 1,
+            error: Some(crate::socket::protocol::GitError { code: "GitError".to_string(), message: e.to_string() }),
             result: None,
         }
     }
