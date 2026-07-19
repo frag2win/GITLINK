@@ -1,24 +1,15 @@
 package middleware
 
 import (
-	"os"
 	"strings"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/golang-jwt/jwt/v5"
 )
 
-var jwtSecret = []byte(os.Getenv("JWT_SECRET"))
-
-func init() {
-	if len(jwtSecret) == 0 {
-		jwtSecret = []byte("super-secret-key-change-in-prod")
-	}
-}
-
 // Auth returns a Fiber middleware handler that validates the user's
 // identity on each request using JWT.
-func Auth() fiber.Handler {
+func Auth(jwtSecret []byte) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		authHeader := c.Get("Authorization")
 		if authHeader == "" {
