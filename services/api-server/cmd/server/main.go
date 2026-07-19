@@ -1,12 +1,8 @@
-// Package main is the entry point for the api-server.
-//
-// It initializes the Fiber HTTP framework, loads configuration from
-// environment variables, connects to the SQLite database, registers
-// routes and middleware, and starts listening on the configured port.
 package main
 
 import (
-	"log"
+	"context"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
@@ -17,70 +13,144 @@ import (
 	"github.com/localrepo/api-server/internal/config"
 	"github.com/localrepo/api-server/internal/database"
 	"github.com/localrepo/api-server/internal/handlers"
+	"github.com/localrepo/api-server/internal/ipc"
 	"github.com/localrepo/api-server/internal/middleware"
+	"github.com/localrepo/api-server/internal/models"
+	"github.com/localrepo/api-server/internal/repository"
 	"github.com/localrepo/api-server/internal/router"
-	"github.com/localrepo/api-server/internal/socket"
+	"github.com/localrepo/api-server/internal/service"
 	"github.com/localrepo/api-server/internal/ssh"
 )
 
 func main() {
-	// ---- Load configuration ----
+	// 1. Initialize Logger
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	slog.SetDefault(logger)
+
+	// 2. Load and Validate Config
 	cfg, err := config.Load()
 	if err != nil {
-		log.Fatalf("failed to load configuration: %v", err)
+		logger.Error("Failed to load config", "error", err)
+		os.Exit(1)
 	}
 
-	// ---- Initialise database ----
+	// 3. Open Database
 	db, err := database.New(cfg.DBUrl)
 	if err != nil {
-		log.Fatalf("failed to initialise database: %v", err)
+		logger.Error("Failed to initialise database", "error", err)
+		os.Exit(1)
 	}
 	defer db.Close()
 
-	if err := db.Migrate(); err != nil {
-		log.Fatalf("failed to run database migrations: %v", err)
+	// 4. Run Migrations (if applicable in dev, or skip in prod)
+	if cfg.DevMode {
+		logger.Info("DevMode enabled: running database migrations")
+		if err := db.Conn.AutoMigrate(
+			&models.User{},
+			&models.SSHKey{},
+			&models.Repository{},
+			&models.RepositoryCollaborator{},
+			&models.BranchProtection{},
+			&models.PullRequest{},
+			&models.AuditLog{},
+		); err != nil {
+			logger.Error("Failed to run database migrations", "error", err)
+			os.Exit(1)
+		}
+	} else {
+		logger.Info("DevMode disabled: skipping database migrations")
 	}
 
-	// ---- Create Fiber app ----
+	// 5. Wire DI Container (Repositories)
+	userRepo := repository.NewUserRepository(db.Conn)
+	sshRepo := repository.NewSSHRepository(db.Conn)
+	repoRepo := repository.NewRepoRepository(db.Conn)
+	healthRepo := repository.NewHealthRepository(db.Conn)
+	contributorRepo := repository.NewContributorRepository(db.Conn)
+	branchProtectionRepo := repository.NewBranchProtectionRepository(db.Conn)
+
+	auditRepo := repository.NewAuditRepository(db.Conn)
+	txManager := repository.NewTransactionManager(db.Conn)
+
+	// 6. Wire DI Container (Clients)
+	gitTransport, err := ipc.NewTransport(cfg.GitIPCNetwork, cfg.GitIPCAddress, 30*time.Second)
+	if err != nil {
+		logger.Error("Failed to initialize git IPC transport", "error", err)
+		os.Exit(1)
+	}
+	gitClient := ipc.NewGitClient(gitTransport, 30*time.Second)
+
+	// 7. Wire DI Container (Services)
+	authSvc := service.NewAuthService(userRepo, cfg.JWTSecret)
+	sshSvc := service.NewSSHService(sshRepo)
+	gitSvc := service.NewGitService(gitClient)
+	auditSvc := service.NewAuditService(auditRepo)
+	repoSvc := service.NewRepoService(repoRepo, gitSvc, auditSvc, txManager)
+	healthSvc := service.NewHealthService(healthRepo)
+	branchProtectSvc := service.NewBranchProtectionService(branchProtectionRepo)
+	authzSvc := service.NewAuthorizationService(repoRepo, contributorRepo, branchProtectionRepo)
+	pullSvc := service.NewPullRequestService(db.Conn, gitSvc)
+
+	// 8. Wire DI Container (Handlers)
+	diHandlers := &router.Handlers{
+		Auth:        handlers.NewAuthHandler(authSvc),
+		SSH:         handlers.NewSSHHandler(sshSvc),
+		Repo:        handlers.NewRepoHandler(repoSvc),
+		Branch:      handlers.NewBranchHandler(gitSvc, repoSvc, branchProtectSvc, authzSvc),
+		Pull:        handlers.NewPullRequestHandler(pullSvc, repoSvc),
+		Commit:      handlers.NewCommitHandler(gitSvc, repoSvc),
+		File:        handlers.NewFileHandler(gitSvc, repoSvc),
+		Contributor: handlers.NewContributorHandler(repoSvc, contributorRepo, userRepo),
+		Health:      handlers.NewHealthHandler(healthSvc),
+		GitHTTP:     handlers.NewGitHTTPHandler(gitSvc),
+	}
+
+	// 8. Start IPC Server for Git Hooks
+	authIPC := ipc.NewAuthSocketServer(cfg.AuthSocketPath, ipc.PushAuthorizerFunc(func(ctx context.Context, userID uint, repoName, branchName string) (bool, string, error) {
+		res, err := authzSvc.AuthorizePush(ctx, userID, repoName, branchName)
+		if err != nil {
+			return false, "", err
+		}
+		return res.Allowed, res.Reason, nil
+	}), logger)
+	go func() {
+		if err := authIPC.Start(); err != nil {
+			logger.Error("IPC Auth Socket server error", "error", err)
+		}
+	}()
+
+	// 9. Create and Configure REST App
 	app := fiber.New(fiber.Config{
 		AppName:      "LocalRepo API Server",
 		ServerHeader: "LocalRepo",
 	})
-
-	// ---- Initialise Git Client ----
-	gitClient := socket.NewGitClient(cfg.GitSocketPath, 30*time.Second)
-	handlers.Init(gitClient, db)
-
-	// ---- Register global middleware ----
 	middleware.SetupCORS(app)
 	middleware.SetupLogger(app)
+	router.Setup(app, diHandlers, cfg)
 
-	// ---- Register routes ----
-	router.Setup(app, db, cfg)
-
-	// ---- Start SSH Server ----
+	// 10. Start SSH Server
 	go func() {
-		if err := ssh.Start(cfg); err != nil {
-			log.Fatalf("ssh server error: %v", err)
+		if err := ssh.Start(cfg, sshSvc, repoSvc, authzSvc); err != nil {
+			logger.Error("SSH server error", "error", err)
 		}
 	}()
 
-	// ---- Graceful shutdown ----
+	// 11. Graceful Shutdown
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 
 	go func() {
 		<-quit
-		log.Println("shutting down server…")
+		logger.Info("Shutting down server...")
 		if err := app.Shutdown(); err != nil {
-			log.Printf("server shutdown error: %v", err)
+			logger.Error("Server shutdown error", "error", err)
 		}
 	}()
 
-	// ---- Start listening ----
+	// 12. Start listening REST
 	addr := ":" + cfg.Port
-	log.Printf("api-server listening on %s", addr)
+	logger.Info("api-server listening", "address", addr)
 	if err := app.Listen(addr); err != nil {
-		log.Fatalf("server error: %v", err)
+		logger.Error("REST server error", "error", err)
 	}
 }
