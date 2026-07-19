@@ -78,6 +78,9 @@ pub fn create_branch(
     branch_name: &str,
     target_commit_id: &str,
 ) -> Result<BranchInfo, GitError> {
+    let repo_path = crate::git::repository::repo_full_path(repos_dir, repo_name);
+    let _lock = crate::git::lock::acquire(&repo_path)?;
+    
     let repo = crate::git::repository::open(repos_dir, repo_name)?;
 
     let oid = git2::Oid::from_str(target_commit_id).map_err(|_| GitError::ObjectNotFound {
@@ -88,7 +91,13 @@ pub fn create_branch(
         oid: target_commit_id.to_string(),
     })?;
 
-    let _branch = repo.branch(branch_name, &commit, false)?;
+    let _branch = repo.branch(branch_name, &commit, false).map_err(|e| {
+        if e.code() == git2::ErrorCode::Exists {
+            GitError::BranchExists { name: branch_name.to_string() }
+        } else {
+            GitError::Libgit2(e)
+        }
+    })?;
 
     info!(
         repo = %repo_name,
@@ -116,6 +125,9 @@ pub fn delete_branch(
     repo_name: &str,
     branch_name: &str,
 ) -> Result<(), GitError> {
+    let repo_path = crate::git::repository::repo_full_path(repos_dir, repo_name);
+    let _lock = crate::git::lock::acquire(&repo_path)?;
+
     let repo = crate::git::repository::open(repos_dir, repo_name)?;
 
     let mut branch = repo
@@ -171,4 +183,102 @@ pub fn list_tags(repos_dir: &Path, repo_name: &str) -> Result<Vec<TagInfo>, GitE
 
     debug!(count = tags.len(), repo = %repo_name, "Listed tags");
     Ok(tags)
+}
+
+/// Create a new tag pointing to the given commit OID.
+///
+/// # Parameters
+/// - `tag_name` — Name for the new tag.
+/// - `target_commit_id` — Hex OID of the commit to point to.
+/// - `message` — Optional message for an annotated tag. If None, creates a lightweight tag.
+///
+/// # Errors
+/// Returns [`GitError::ObjectNotFound`] if the target commit does not exist.
+#[instrument(skip(repos_dir))]
+pub fn create_tag(
+    repos_dir: &Path,
+    repo_name: &str,
+    tag_name: &str,
+    target_commit_id: &str,
+    message: Option<&str>,
+    tagger_name: Option<&str>,
+    tagger_email: Option<&str>,
+) -> Result<TagInfo, GitError> {
+    let repo_path = crate::git::repository::repo_full_path(repos_dir, repo_name);
+    let _lock = crate::git::lock::acquire(&repo_path)?;
+
+    let repo = crate::git::repository::open(repos_dir, repo_name)?;
+
+    let oid = git2::Oid::from_str(target_commit_id).map_err(|_| GitError::ObjectNotFound {
+        oid: target_commit_id.to_string(),
+    })?;
+
+    let commit = repo.find_commit(oid).map_err(|_| GitError::ObjectNotFound {
+        oid: target_commit_id.to_string(),
+    })?;
+    
+    let obj = commit.into_object();
+
+    if let Some(msg) = message {
+        let name = tagger_name.unwrap_or("Gitlink System");
+        let email = tagger_email.unwrap_or("system@gitlink.local");
+        let sig = git2::Signature::now(name, email)?;
+        repo.tag(tag_name, &obj, &sig, msg, false)?;
+    } else {
+        repo.tag_lightweight(tag_name, &obj, false)?;
+    }
+
+    info!(
+        repo = %repo_name,
+        tag = %tag_name,
+        target = %target_commit_id,
+        "Created tag"
+    );
+
+    // Re-fetch to return info
+    let refname = format!("refs/tags/{tag_name}");
+    let reference = repo.find_reference(&refname)?;
+    
+    let (is_annotated, msg_out, t_name, tagged_at) = if let Ok(tag) = reference.peel_to_tag() {
+        (
+            true,
+            tag.message().map(String::from),
+            tag.tagger().and_then(|t| t.name().map(String::from)),
+            tag.tagger().map(|t| format!("{}", t.when().seconds())),
+        )
+    } else {
+        (false, None, None, None)
+    };
+
+    Ok(TagInfo {
+        name: tag_name.to_string(),
+        target_id: target_commit_id.to_string(),
+        is_annotated,
+        message: msg_out,
+        tagger_name: t_name,
+        tagged_at,
+    })
+}
+
+/// Delete a tag by name.
+///
+/// # Errors
+/// Returns [`GitError::RefNotFound`] if the tag does not exist.
+#[instrument(skip(repos_dir))]
+pub fn delete_tag(
+    repos_dir: &Path,
+    repo_name: &str,
+    tag_name: &str,
+) -> Result<(), GitError> {
+    let repo_path = crate::git::repository::repo_full_path(repos_dir, repo_name);
+    let _lock = crate::git::lock::acquire(&repo_path)?;
+
+    let repo = crate::git::repository::open(repos_dir, repo_name)?;
+    
+    repo.tag_delete(tag_name).map_err(|_| GitError::RefNotFound {
+        name: tag_name.to_string(),
+    })?;
+
+    info!(repo = %repo_name, tag = %tag_name, "Deleted tag");
+    Ok(())
 }

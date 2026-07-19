@@ -22,6 +22,7 @@ use crate::models::RepoInfo;
 /// Returns [`GitError::RepoAlreadyExists`] if the directory already exists.
 #[instrument(skip(repos_dir))]
 pub fn init_bare(repos_dir: &Path, name: &str) -> Result<RepoInfo, GitError> {
+    crate::git::sanitize::validate_repo_name(name)?;
     let repo_path = repo_full_path(repos_dir, name);
 
     if repo_path.exists() {
@@ -59,6 +60,7 @@ pub fn init_bare(repos_dir: &Path, name: &str) -> Result<RepoInfo, GitError> {
 /// Returns [`GitError::RepoNotFound`] if the directory does not exist.
 #[instrument(skip(repos_dir))]
 pub fn open(repos_dir: &Path, name: &str) -> Result<Repository, GitError> {
+    crate::git::sanitize::validate_repo_name(name)?;
     let repo_path = repo_full_path(repos_dir, name);
 
     if !repo_path.exists() {
@@ -111,6 +113,7 @@ pub fn list_repos(repos_dir: &Path) -> Result<Vec<RepoInfo>, GitError> {
 /// Returns [`GitError::RepoNotFound`] if the repository does not exist.
 #[instrument(skip(repos_dir))]
 pub fn delete_repo(repos_dir: &Path, name: &str) -> Result<(), GitError> {
+    crate::git::sanitize::validate_repo_name(name)?;
     let repo_path = repo_full_path(repos_dir, name);
 
     if !repo_path.exists() {
@@ -118,6 +121,8 @@ pub fn delete_repo(repos_dir: &Path, name: &str) -> Result<(), GitError> {
             path: repo_path.display().to_string(),
         });
     }
+
+    let _lock = crate::git::lock::acquire(&repo_path)?;
 
     info!(name = %name, path = %repo_path.display(), "Deleting repository");
     std::fs::remove_dir_all(&repo_path).map_err(|e| GitError::Other(e.to_string()))?;
@@ -129,7 +134,7 @@ pub fn delete_repo(repos_dir: &Path, name: &str) -> Result<(), GitError> {
 // ---------------------------------------------------------------------------
 
 /// Construct the full filesystem path for a repository.
-fn repo_full_path(repos_dir: &Path, name: &str) -> PathBuf {
+pub fn repo_full_path(repos_dir: &Path, name: &str) -> PathBuf {
     let dir_name = if name.ends_with(".git") {
         name.to_string()
     } else {

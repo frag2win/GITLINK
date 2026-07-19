@@ -193,3 +193,74 @@ pub fn walk_tree(
     debug!(tree = %tree_oid_str, count = file_entries.len(), "Walked tree");
     Ok(file_entries)
 }
+
+/// Resolves a revision string and an optional path to a git blob, returning its content.
+#[instrument(skip(repos_dir))]
+pub fn read_file_by_path(
+    repos_dir: &Path,
+    repo_name: &str,
+    rev: &str,
+    path: &str,
+) -> Result<Vec<u8>, GitError> {
+    let repo = crate::git::repository::open(repos_dir, repo_name)?;
+    let obj = repo.revparse_single(rev).map_err(|_| GitError::RefNotFound { name: rev.to_string() })?;
+    
+    let target_obj = if path.is_empty() {
+        obj
+    } else {
+        let tree = obj.peel_to_tree().map_err(|_| GitError::Other("Revision is not a tree".to_string()))?;
+        let entry = tree.get_path(Path::new(path)).map_err(|_| GitError::ObjectNotFound { oid: path.to_string() })?;
+        entry.to_object(&repo)?
+    };
+
+    let blob = target_obj.as_blob().ok_or_else(|| GitError::Other("Path is not a file (blob)".to_string()))?;
+    Ok(blob.content().to_vec())
+}
+
+/// Resolves a revision string and an optional path to a git tree, returning its entries.
+#[instrument(skip(repos_dir))]
+pub fn read_tree_by_path(
+    repos_dir: &Path,
+    repo_name: &str,
+    rev: &str,
+    path: &str,
+) -> Result<Vec<TreeEntry>, GitError> {
+    let repo = crate::git::repository::open(repos_dir, repo_name)?;
+    let obj = repo.revparse_single(rev).map_err(|_| GitError::RefNotFound { name: rev.to_string() })?;
+    
+    let target_obj = if path.is_empty() {
+        obj
+    } else {
+        let tree = obj.peel_to_tree().map_err(|_| GitError::Other("Revision is not a tree".to_string()))?;
+        let entry = tree.get_path(Path::new(path)).map_err(|_| GitError::ObjectNotFound { oid: path.to_string() })?;
+        entry.to_object(&repo)?
+    };
+
+    let tree = target_obj.as_tree().ok_or_else(|| GitError::Other("Path is not a directory (tree)".to_string()))?;
+    
+    let mut entries = Vec::with_capacity(tree.len());
+    for entry in tree.iter() {
+        let object_type = match entry.kind() {
+            Some(git2::ObjectType::Blob) => TreeEntryKind::Blob,
+            Some(git2::ObjectType::Tree) => TreeEntryKind::Tree,
+            Some(git2::ObjectType::Commit) => TreeEntryKind::Commit,
+            _ => continue,
+        };
+
+        let size = if object_type == TreeEntryKind::Blob {
+            repo.find_blob(entry.id()).ok().map(|b| b.size() as u64)
+        } else {
+            None
+        };
+
+        entries.push(TreeEntry {
+            name: entry.name().unwrap_or("").to_string(),
+            object_type,
+            oid: entry.id().to_string(),
+            filemode: entry.filemode() as u32,
+            size,
+        });
+    }
+
+    Ok(entries)
+}

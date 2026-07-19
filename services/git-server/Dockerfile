@@ -41,6 +41,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libgit2-1.5 \
     ca-certificates \
     git \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Create directories for repos and socket
