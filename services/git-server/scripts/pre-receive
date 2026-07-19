@@ -2,8 +2,10 @@
 
 # pre-receive hook
 # Intercepts pushes to validate branch protections via the API server.
+# Communicates exclusively over Unix Domain Socket to maintain isolation.
 
-API_URL="http://api-server:3000/internal/hooks/pre-receive"
+AUTH_SOCKET="/run/git/auth.sock"
+AUTH_URL="http://localhost/hooks/pre-receive"
 REPO_NAME=$(basename "$PWD" .git)
 
 while read oldrev newrev refname; do
@@ -12,8 +14,12 @@ while read oldrev newrev refname; do
         refs/heads/*)
             BRANCH=${refname#refs/heads/}
             
-            # Make HTTP POST to the api-server
-            HTTP_CODE=$(wget -qO- --post-data="{\"repo\": \"$REPO_NAME\", \"branch\": \"$BRANCH\", \"oldrev\": \"$oldrev\", \"newrev\": \"$newrev\"}" --header="Content-Type: application/json" "$API_URL" | grep -o '"allowed":\s*true')
+            # Make HTTP POST to the api-server via Unix Socket
+            # Use curl --unix-socket to hit the isolated auth socket
+            HTTP_CODE=$(curl -s --unix-socket "$AUTH_SOCKET" \
+                -H "Content-Type: application/json" \
+                -d "{\"repo\": \"$REPO_NAME\", \"branch\": \"$BRANCH\", \"oldrev\": \"$oldrev\", \"newrev\": \"$newrev\"}" \
+                "$AUTH_URL" | grep -o '"allowed":\s*true')
             
             if [ -z "$HTTP_CODE" ]; then
                 echo "GL-HOOK-ERR: Push to branch '$BRANCH' is rejected by branch protection rules." >&2
