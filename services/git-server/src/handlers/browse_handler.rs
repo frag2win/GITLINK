@@ -12,40 +12,24 @@ use crate::socket::protocol::git_command_response::Result as ResponseResult;
 pub async fn handle_get_file(req: GetFileRequest, config: &Config) -> GitCommandResponse {
     let repos_dir = Path::new(&config.repos_path);
     
-    // Simplistic implementation for file read:
-    // Try to resolve ref_or_hash to a commit, then walk tree to path, then read blob.
-    
-    // Fast path: if path is empty, maybe they just passed an OID in ref_or_hash
-    if req.path.is_empty() {
-        match crate::git::objects::read_blob(repos_dir, &req.repo_name, &req.ref_or_hash) {
-            Ok(content) => {
-                let is_binary = content.contains(&0);
-                return GitCommandResponse {
-                    success: true,
-                    error_message: String::new(),
-                    result: Some(ResponseResult::GetFile(GetFileResponse {
-                        content,
-                        size: 0, // Content length could be used
-                        is_binary,
-                    })),
-                };
-            }
-            Err(e) => {
-                return GitCommandResponse {
-                    success: false,
-                    error_message: e.to_string(),
-                    result: None,
-                };
+    match crate::git::objects::read_file_by_path(repos_dir, &req.repo_name, &req.ref_or_hash, &req.path) {
+        Ok(content) => {
+            let is_binary = content.contains(&0);
+            GitCommandResponse {
+                protocol_version: 1, error: None,
+                
+                result: Some(ResponseResult::GetFile(GetFileResponse {
+                    content,
+                    size: 0,
+                    is_binary,
+                })),
             }
         }
-    }
-
-    // Resolving tree and walking path is more complex, here we stub the full logic
-    // for brevity since we're porting.
-    GitCommandResponse {
-        success: false,
-        error_message: "Path walking for ReadFile not fully ported yet".into(),
-        result: None,
+        Err(e) => GitCommandResponse {
+            protocol_version: 1,
+            error: Some(crate::socket::protocol::GitError { code: "GitError".to_string(), message: e.to_string() }),
+            result: None,
+        }
     }
 }
 
@@ -53,8 +37,7 @@ pub async fn handle_get_file(req: GetFileRequest, config: &Config) -> GitCommand
 pub async fn handle_get_tree(req: GetTreeRequest, config: &Config) -> GitCommandResponse {
     let repos_dir = Path::new(&config.repos_path);
     
-    // Resolve tree OID and read tree
-    match crate::git::objects::read_tree(repos_dir, &req.repo_name, &req.ref_or_hash) {
+    match crate::git::objects::read_tree_by_path(repos_dir, &req.repo_name, &req.ref_or_hash, &req.path) {
         Ok(entries) => {
             let proto_entries = entries.into_iter().map(|e| TreeEntry {
                 name: e.name,
@@ -69,14 +52,14 @@ pub async fn handle_get_tree(req: GetTreeRequest, config: &Config) -> GitCommand
             }).collect();
 
             GitCommandResponse {
-                success: true,
-                error_message: String::new(),
+                protocol_version: 1, error: None,
+                
                 result: Some(ResponseResult::GetTree(GetTreeResponse { entries: proto_entries })),
             }
         }
         Err(e) => GitCommandResponse {
-            success: false,
-            error_message: e.to_string(),
+            protocol_version: 1,
+            error: Some(crate::socket::protocol::GitError { code: "GitError".to_string(), message: e.to_string() }),
             result: None,
         }
     }
