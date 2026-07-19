@@ -138,6 +138,8 @@ services:
     container_name: p2p-git-postgres
     networks:
       - internal-bridge
+    ports:
+      - "5432:5432"
     restart: unless-stopped
     environment:
       POSTGRES_USER: gitadmin
