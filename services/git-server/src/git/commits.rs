@@ -104,17 +104,33 @@ pub fn get_commit_detail(
     crate::git::objects::read_commit(repos_dir, repo_name, oid_str)
 }
 
+#[derive(Debug)]
+pub struct DiffConfig {
+    pub context_lines: u32,
+    pub ignore_whitespace: bool,
+}
+
+impl Default for DiffConfig {
+    fn default() -> Self {
+        Self {
+            context_lines: 3,
+            ignore_whitespace: false,
+        }
+    }
+}
+
 /// Compute the diff between two commits.
 ///
 /// If `from_oid_str` is `None`, diffs against the first parent of `to_oid_str`.
-/// Returns a [`DiffInfo`] with file-level and aggregate statistics.
+/// Returns the unified diff as a String.
 #[instrument(skip(repos_dir))]
 pub fn get_diff(
     repos_dir: &Path,
     repo_name: &str,
     from_oid_str: Option<&str>,
     to_oid_str: &str,
-) -> Result<DiffInfo, GitError> {
+    config: &DiffConfig,
+) -> Result<String, GitError> {
     let repo = crate::git::repository::open(repos_dir, repo_name)?;
 
     // Resolve the "to" commit and its tree
@@ -136,67 +152,36 @@ pub fn get_diff(
         None => to_commit.parent(0).ok().and_then(|p| p.tree().ok()),
     };
 
+    let mut diff_opts = git2::DiffOptions::new();
+    diff_opts.context_lines(config.context_lines);
+    if config.ignore_whitespace {
+        diff_opts.ignore_whitespace_eol(true);
+        diff_opts.ignore_whitespace_change(true);
+    }
+
     let diff = repo.diff_tree_to_tree(
         from_tree.as_ref(),
         Some(&to_tree),
-        None,
+        Some(&mut diff_opts),
     )?;
 
-    let stats = diff.stats()?;
-    let mut files = Vec::new();
-
-    diff.foreach(
-        &mut |delta, _progress| {
-            let path = delta
-                .new_file()
-                .path()
-                .and_then(|p| p.to_str())
-                .unwrap_or("")
-                .to_string();
-
-            let old_path = delta
-                .old_file()
-                .path()
-                .and_then(|p| p.to_str())
-                .map(String::from);
-
-            let status = match delta.status() {
-                git2::Delta::Added => "added",
-                git2::Delta::Deleted => "deleted",
-                git2::Delta::Modified => "modified",
-                git2::Delta::Renamed => "renamed",
-                git2::Delta::Copied => "copied",
-                _ => "unknown",
-            }
-            .to_string();
-
-            files.push(DiffFileEntry {
-                path,
-                old_path,
-                status,
-                insertions: 0,
-                deletions: 0,
-                patch: None,
-            });
-
-            true
-        },
-        None,
-        None,
-        None,
-    )?;
+    let mut patch_text = String::new();
+    diff.print(git2::DiffFormat::Patch, |_delta, _hunk, line| {
+        let prefix = match line.origin() {
+            '+' | '-' | ' ' => format!("{}", line.origin()),
+            _ => String::new(),
+        };
+        let content = std::str::from_utf8(line.content()).unwrap_or("");
+        patch_text.push_str(&prefix);
+        patch_text.push_str(content);
+        true
+    })?;
 
     debug!(
         repo = %repo_name,
         to = %to_oid_str,
-        files_changed = files.len(),
-        "Computed diff"
+        "Computed unified diff"
     );
 
-    Ok(DiffInfo {
-        files_changed: stats.files_changed(),
-        insertions: stats.insertions(),
-        deletions: stats.deletions(),
-        files,
-    })
+    Ok(patch_text)
 }
