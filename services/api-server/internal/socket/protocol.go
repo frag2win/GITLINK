@@ -5,16 +5,16 @@ package socket
 // names to ensure a consistent vocabulary.
 const (
 	// Git operations
-	ActionInitRepo      = "init-repo"
-	ActionDeleteRepo    = "delete-repo"
-	ActionListBranches  = "list-branches"
-	ActionGetBranch     = "get-branch"
-	ActionCreateBranch  = "create-branch"
-	ActionDeleteBranch  = "delete-branch"
-	ActionLog           = "log"
-	ActionShow          = "show"
-	ActionLsTree        = "ls-tree"
-	ActionCatFile       = "cat-file"
+	ActionInitRepo     = "init-repo"
+	ActionDeleteRepo   = "delete-repo"
+	ActionListBranches = "list-branches"
+	ActionGetBranch    = "get-branch"
+	ActionCreateBranch = "create-branch"
+	ActionDeleteBranch = "delete-branch"
+	ActionLog          = "log"
+	ActionShow         = "show"
+	ActionLsTree       = "ls-tree"
+	ActionCatFile      = "cat-file"
 
 	// P2P operations
 	ActionPeerClone     = "peer-clone"
