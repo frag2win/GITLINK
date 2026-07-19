@@ -3,7 +3,7 @@ package queue
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"net/http/cgi"
 	"os"
@@ -23,14 +23,17 @@ var (
 )
 
 // Init initializes the queue directory.
-func Init() {
+func Init(queuePath string) {
+	if queuePath != "" {
+		queueDir = queuePath
+	}
 	if err := os.MkdirAll(queueDir, 0755); err != nil {
-		log.Printf("queue: failed to create queue directory: %v", err)
+		slog.Error("queue: failed to create queue directory", "error", err)
 	}
 }
 
 // HandleOfflinePush processes a Git push request locally when the remote peer is offline.
-func HandleOfflinePush(w http.ResponseWriter, r *http.Request, peerIDStr string, repoPath string, h host.Host) {
+func HandleOfflinePush(w http.ResponseWriter, r *http.Request, peerIDStr string, repoPath string, h host.Host, proxyPort string) {
 	mu.Lock()
 	defer mu.Unlock()
 
@@ -62,7 +65,7 @@ func HandleOfflinePush(w http.ResponseWriter, r *http.Request, peerIDStr string,
 			http.Error(w, "Failed to init queue repo", http.StatusInternalServerError)
 			return
 		}
-		log.Printf("queue: initialized offline repo at %s", localRepoPath)
+		slog.Info(fmt.Sprintf("queue: initialized offline repo at %s", localRepoPath))
 	}
 
 	// Route to git http-backend
@@ -87,7 +90,7 @@ func HandleOfflinePush(w http.ResponseWriter, r *http.Request, peerIDStr string,
 	// Rewrite request so git http-backend understands it
 	r.URL.Path = "/" + repoName + ".git" + strings.TrimPrefix(repoPath, "/"+repoName)
 
-	log.Printf("queue: buffering push for peer %s, repo %s", peerIDStr, repoName)
+	slog.Info(fmt.Sprintf("queue: buffering push for peer %s, repo %s", peerIDStr, repoName))
 	handler.ServeHTTP(w, r)
 
 	// If this was the POST request (the actual push), schedule a sync
@@ -99,7 +102,7 @@ func HandleOfflinePush(w http.ResponseWriter, r *http.Request, peerIDStr string,
 func scheduleSync(peerIDStr, repoName string, h host.Host) {
 	targetPeer, err := peer.Decode(peerIDStr)
 	if err != nil {
-		log.Printf("queue: invalid peer ID %s: %v", peerIDStr, err)
+		slog.Info(fmt.Sprintf("queue: invalid peer ID %s: %v", peerIDStr, err))
 		return
 	}
 
@@ -108,11 +111,11 @@ func scheduleSync(peerIDStr, repoName string, h host.Host) {
 	for {
 		time.Sleep(10 * time.Second)
 
-		log.Printf("queue: attempting to sync %s to peer %s...", repoName, peerIDStr)
+		slog.Info(fmt.Sprintf("queue: attempting to sync %s to peer %s...", repoName, peerIDStr))
 
 		// Try to connect to peer
 		if err := h.Connect(context.Background(), peer.AddrInfo{ID: targetPeer}); err != nil {
-			log.Printf("queue: peer %s still offline, retrying later...", peerIDStr)
+			slog.Info(fmt.Sprintf("queue: peer %s still offline, retrying later...", peerIDStr))
 			continue
 		}
 
@@ -130,13 +133,13 @@ func scheduleSync(peerIDStr, repoName string, h host.Host) {
 		cmd.Dir = localRepoPath
 		out, err := cmd.CombinedOutput()
 		if err != nil {
-			log.Printf("queue: sync failed: %s", string(out))
+			slog.Info(fmt.Sprintf("queue: sync failed: %s", string(out)))
 			// Might be a non-fast-forward or remote issue. We keep trying or log error.
 			time.Sleep(30 * time.Second)
 			continue
 		}
 
-		log.Printf("queue: successfully synced %s to peer %s!", repoName, peerIDStr)
+		slog.Info(fmt.Sprintf("queue: successfully synced %s to peer %s!", repoName, peerIDStr))
 		
 		// Optionally, clear the queue by removing the repo or leaving it as a cache.
 		// For now, leaving it is safer, git push will just say "Everything up-to-date" next time.

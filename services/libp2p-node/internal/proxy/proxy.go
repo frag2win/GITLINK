@@ -4,7 +4,9 @@ import (
 	"bufio"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/libp2p/go-libp2p/core/host"
@@ -23,13 +25,23 @@ func NewServer(h host.Host) *Server {
 	return &Server{host: h}
 }
 
-// Start runs the proxy server on the given address.
-func (s *Server) Start(addr string) error {
+// Start runs the proxy server on the given Unix socket path.
+func (s *Server) Start(socketPath string) error {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/p2p/", s.handleProxy)
 
-	log.Printf("Starting local git proxy on http://%s", addr)
-	return http.ListenAndServe(addr, mux)
+	os.Remove(socketPath)
+	listener, err := net.Listen("unix", socketPath)
+	if err != nil {
+		return err
+	}
+	
+	if err := os.Chmod(socketPath, 0666); err != nil {
+		log.Printf("git proxy: failed to chmod socket: %v", err)
+	}
+
+	log.Printf("Starting local git proxy on unix socket %s", socketPath)
+	return http.Serve(listener, mux)
 }
 
 // handleProxy intercepts requests like:
@@ -58,7 +70,7 @@ func (s *Server) handleProxy(w http.ResponseWriter, r *http.Request) {
 	stream, err := s.host.NewStream(r.Context(), targetPeer, protocol.GitProtocolID)
 	if err != nil {
 		log.Printf("git proxy: failed to open stream to peer %s: %v. Attempting offline queue.", peerIDStr, err)
-		queue.HandleOfflinePush(w, r, peerIDStr, repoPath, s.host)
+		queue.HandleOfflinePush(w, r, peerIDStr, repoPath, s.host, "")
 		return
 	}
 	defer stream.Close()
