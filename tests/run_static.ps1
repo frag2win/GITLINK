@@ -10,9 +10,10 @@ $step1 = & ".\tests\01_prereqs.ps1"
 $step2 = & ".\tests\02_build_and_unit.ps1"
 $step3 = & ".\tests\03_security_and_sanitization.ps1"
 $step4 = & ".\tests\04_sync_and_idempotency.ps1"
+$step5 = & ".\tests\05_distributed_and_chaos.ps1"
 
-$totalPassed = $step2.Passed + $step3.Passed + $step4.Passed
-$totalFailed = $step2.Failed + $step3.Failed + $step4.Failed
+$totalPassed = $step2.Passed + $step3.Passed + $step4.Passed + $step5.Passed
+$totalFailed = $step2.Failed + $step3.Failed + $step4.Failed + $step5.Failed
 $totalTests = $totalPassed + $totalFailed
 $duration = (Get-Date) - $startTime
 
