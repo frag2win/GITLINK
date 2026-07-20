@@ -196,13 +196,20 @@ func (r *syncRepository) GetDLQTasks(ctx context.Context) ([]models.SyncTask, er
 }
 
 func (r *syncRepository) ReplayDLQTask(ctx context.Context, id uint) error {
-	return r.db.WithContext(ctx).
+	res := r.db.WithContext(ctx).
 		Model(&models.SyncTask{}).
-		Where("id = ?", id).
+		Where("id = ? AND status = ?", id, models.SyncTaskFailed).
 		Updates(map[string]interface{}{
 			"status":        models.SyncTaskPending,
 			"attempt_count": 0,
 			"last_error":    "Manually replayed from DLQ",
 			"next_retry_at": nil,
-		}).Error
+		})
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound // Or a custom error representing that the task is not in DLQ
+	}
+	return nil
 }

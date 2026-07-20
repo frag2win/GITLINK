@@ -11,6 +11,7 @@ type User struct {
 	Email        string `gorm:"uniqueIndex;not null"`
 	PasswordHash string `gorm:"not null;default:''"`
 	PeerID       string `gorm:"uniqueIndex;not null"` // Link to libp2p identity
+	IsAdmin      bool   `gorm:"default:false" json:"is_admin"`
 	SSHKeys      []SSHKey
 }
 

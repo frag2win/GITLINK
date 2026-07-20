@@ -62,6 +62,7 @@ func main() {
 			&models.TeamMember{},
 			&models.TeamRepositoryPermission{},
 			&models.Notification{},
+			&models.ConflictReport{},
 		); err != nil {
 			logger.Error("Failed to run database migrations", "error", err)
 			os.Exit(1)
@@ -127,14 +128,14 @@ func main() {
 		Commit:       handlers.NewCommitHandler(gitSvc, repoSvc),
 		File:         handlers.NewFileHandler(gitSvc, repoSvc),
 		Contributor:  handlers.NewContributorHandler(repoSvc, contributorRepo, userRepo),
-		Health:       handlers.NewHealthHandler(healthSvc, syncRepo),
+		Health:       handlers.NewHealthHandler(healthSvc, syncRepo, gitSvc, peerSvc),
 		GitHTTP:      handlers.NewGitHTTPHandler(gitSvc, authzSvc),
 		Sync:         handlers.NewSyncHandler(syncSvc, peerSvc, syncRepo),
 		Team:         handlers.NewTeamHandler(teamSvc),
 		Notification: handlers.NewNotificationHandler(notifSvc),
-		Metrics:      handlers.NewMetricsHandler(syncRepo),
+		Metrics:      handlers.NewMetricsHandler(db.Conn, syncRepo),
 		WS:           handlers.NewWSHandler(wsHub, notifSvc),
-		Admin:        handlers.NewAdminHandler(syncRepo, peerSvc, auditSvc),
+		Admin:        handlers.NewAdminHandler(syncRepo, peerSvc, auditSvc, userRepo, syncSvc),
 		Conflict:     handlers.NewConflictHandler(conflictSvc, repoSvc),
 	}
 

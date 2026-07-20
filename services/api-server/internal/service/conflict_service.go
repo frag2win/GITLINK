@@ -3,6 +3,8 @@ package service
 import (
 	"context"
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/localrepo/api-server/internal/models"
@@ -31,18 +33,52 @@ func (s *conflictService) AnalyzeConflicts(ctx context.Context, repoID uint, rep
 
 	conflictingFiles := make([]models.ConflictingFile, 0)
 
-	if len(diffStr) > 0 {
-		conflictingFiles = append(conflictingFiles, models.ConflictingFile{
-			FilePath: "src/main.go",
-			Hunks: []models.ConflictHunk{
-				{
-					StartLine:       10,
-					EndLine:         25,
-					Reason:          "Concurrent modifications in same hunk between base and head branches",
-					GitConflictType: "content",
-				},
-			},
-		})
+	// Unified diff parser to dynamically extract conflicting files and changed line ranges
+	lines := strings.Split(diffStr, "\n")
+	var currentFile *models.ConflictingFile
+
+	for _, line := range lines {
+		if strings.HasPrefix(line, "diff --git ") {
+			if currentFile != nil && len(currentFile.Hunks) > 0 {
+				conflictingFiles = append(conflictingFiles, *currentFile)
+			}
+			parts := strings.Fields(line)
+			filePath := "unknown_file"
+			if len(parts) >= 4 {
+				filePath = strings.TrimPrefix(parts[3], "b/")
+			}
+			currentFile = &models.ConflictingFile{
+				FilePath: filePath,
+				Hunks:    make([]models.ConflictHunk, 0),
+			}
+		} else if strings.HasPrefix(line, "@@ ") && currentFile != nil {
+			hunk := models.ConflictHunk{
+				GitConflictType: "content",
+				Reason:          "Concurrent modification detected in branch diff hunk",
+			}
+			parts := strings.Split(line, " ")
+			if len(parts) >= 3 {
+				targetPart := parts[2] // e.g. +10,15
+				targetPart = strings.TrimPrefix(targetPart, "+")
+				subParts := strings.Split(targetPart, ",")
+				if len(subParts) > 0 {
+					if start, errParse := strconv.Atoi(subParts[0]); errParse == nil {
+						hunk.StartLine = start
+						hunk.EndLine = start
+						if len(subParts) > 1 {
+							if count, errCount := strconv.Atoi(subParts[1]); errCount == nil {
+								hunk.EndLine = start + count
+							}
+						}
+					}
+				}
+			}
+			currentFile.Hunks = append(currentFile.Hunks, hunk)
+		}
+	}
+
+	if currentFile != nil && len(currentFile.Hunks) > 0 {
+		conflictingFiles = append(conflictingFiles, *currentFile)
 	}
 
 	report := &models.ConflictReport{

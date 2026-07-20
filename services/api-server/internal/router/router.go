@@ -1,6 +1,7 @@
 package router
 
 import (
+	"github.com/gofiber/contrib/websocket"
 	"github.com/gofiber/fiber/v2"
 
 	"github.com/localrepo/api-server/internal/config"
@@ -48,9 +49,10 @@ func Setup(app *fiber.App, h *Handlers, cfg *config.Config) {
 	// Protected routes — require valid JWT
 	protected := api.Group("", middleware.Auth(cfg.JWTSecret))
 
-	// Real-Time Notification Stream (WebSockets / EventSource)
+	// Real-Time Notification Stream (WebSockets)
 	if h.WS != nil {
-		protected.Get("/ws/notifications", h.WS.StreamNotifications)
+		app.Use("/ws/notifications", middleware.Auth(cfg.JWTSecret), h.WS.UpgradeMiddleware())
+		app.Get("/ws/notifications", websocket.New(h.WS.HandleConnection))
 	}
 
 	// Authenticated User info & keys

@@ -66,11 +66,17 @@ func (h *webSocketHub) Unregister(userID uint, sendCh chan WSMessage) {
 }
 
 func (h *webSocketHub) handleDomainEvent(event models.DomainEvent) {
-	h.Broadcast(event)
+	// Only broadcast events that have been persisted and assigned a database ID
+	if event.ID != 0 {
+		h.Broadcast(event)
+	}
 }
 
 func (h *webSocketHub) Broadcast(event models.DomainEvent) uint64 {
-	eventID := h.GetNextEventID()
+	eventID := event.ID
+	if eventID == 0 {
+		eventID = h.GetNextEventID()
+	}
 	msg := WSMessage{
 		EventID: eventID,
 		Event:   event,

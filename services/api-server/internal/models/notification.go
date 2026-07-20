@@ -26,6 +26,7 @@ type Notification struct {
 }
 
 type DomainEvent struct {
+	ID        uint64                 `json:"id"`
 	Type      NotificationType       `json:"type"`
 	UserID    uint                   `json:"user_id"`
 	Title     string                 `json:"title"`

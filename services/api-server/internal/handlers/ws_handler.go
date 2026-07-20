@@ -1,13 +1,11 @@
 package handlers
 
 import (
-	"bufio"
-	"encoding/json"
+	"context"
 	"strconv"
-	"time"
 
+	"github.com/gofiber/contrib/websocket"
 	"github.com/gofiber/fiber/v2"
-	"github.com/localrepo/api-server/internal/middleware"
 	"github.com/localrepo/api-server/internal/models"
 	"github.com/localrepo/api-server/internal/service"
 )
@@ -24,32 +22,36 @@ func NewWSHandler(hub service.WebSocketHub, notifService service.NotificationSer
 	}
 }
 
-func (h *WSHandler) StreamNotifications(c *fiber.Ctx) error {
-	userID := middleware.UserIDFromContext(c)
-	if userID == 0 {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "Unauthorized"})
+func (h *WSHandler) UpgradeMiddleware() fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		if websocket.IsWebSocketUpgrade(c) {
+			return c.Next()
+		}
+		return fiber.ErrUpgradeRequired
+	}
+}
+
+func (h *WSHandler) HandleConnection(c *websocket.Conn) {
+	userIDVal := c.Locals("userID")
+	userID, ok := userIDVal.(uint)
+	if !ok || userID == 0 {
+		c.Close()
+		return
 	}
 
 	sendCh := make(chan service.WSMessage, 64)
 	h.hub.Register(userID, sendCh)
+	defer h.hub.Unregister(userID, sendCh)
 
-	c.Set("Content-Type", "text/event-stream")
-	c.Set("Cache-Control", "no-cache")
-	c.Set("Connection", "keep-alive")
-
-	c.Context().SetBodyStreamWriter(func(w *bufio.Writer) {
-		defer h.hub.Unregister(userID, sendCh)
-
-		// Replay missed notifications if last_event_id is provided in query parameter or header
-		lastEventIDStr := c.Query("last_event_id")
-		if lastEventIDStr == "" {
-			lastEventIDStr = c.Get("Last-Event-ID")
-		}
-		if lastEventIDStr != "" {
-			if lastID, err := strconv.ParseUint(lastEventIDStr, 10, 64); err == nil && lastID > 0 {
-				if notifs, err := h.notifService.GetUserNotifications(c.UserContext(), userID, true); err == nil {
-					for _, n := range notifs {
-						data, _ := json.Marshal(service.WSMessage{
+	// Replay missed notifications if last_event_id is provided in query parameter
+	lastEventIDStr := c.Query("last_event_id")
+	if lastEventIDStr != "" {
+		if lastID, err := strconv.ParseUint(lastEventIDStr, 10, 64); err == nil && lastID > 0 {
+			if notifs, err := h.notifService.GetUserNotifications(context.Background(), userID, true); err == nil {
+				for _, n := range notifs {
+					// Strict Filter: Only replay notifications that occurred AFTER last_event_id
+					if uint64(n.ID) > lastID {
+						_ = c.WriteJSON(service.WSMessage{
 							EventID: uint64(n.ID),
 							Event: models.DomainEvent{
 								Type:    n.Type,
@@ -59,35 +61,25 @@ func (h *WSHandler) StreamNotifications(c *fiber.Ctx) error {
 								Link:    n.Link,
 							},
 						})
-						_, _ = w.WriteString("data: " + string(data) + "\n\n")
-						_ = w.Flush()
 					}
 				}
 			}
 		}
+	}
 
-		ticker := time.NewTicker(15 * time.Second)
-		defer ticker.Stop()
-
-		for {
-			select {
-			case msg, ok := <-sendCh:
-				if !ok {
-					return
-				}
-				data, _ := json.Marshal(msg)
-				_, _ = w.WriteString("data: " + string(data) + "\n\n")
-				if err := w.Flush(); err != nil {
-					return
-				}
-			case <-ticker.C:
-				_, _ = w.WriteString(": keepalive\n\n")
-				if err := w.Flush(); err != nil {
-					return
-				}
+	// Writer loop (keep connections open and stream)
+	go func() {
+		for msg := range sendCh {
+			if err := c.WriteJSON(msg); err != nil {
+				break
 			}
 		}
-	})
+	}()
 
-	return nil
+	// Reader loop (keepalive / close listener)
+	for {
+		if _, _, err := c.ReadMessage(); err != nil {
+			break
+		}
+	}
 }

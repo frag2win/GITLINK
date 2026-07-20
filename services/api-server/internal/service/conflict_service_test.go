@@ -25,6 +25,24 @@ func TestConflictServiceAnalysis(t *testing.T) {
 	}
 
 	if len(report.ConflictingFiles) == 0 {
-		t.Errorf("expected conflicting files diagnostic data to be present")
+		t.Fatalf("expected conflicting files diagnostic data to be present")
+	}
+
+	cf := report.ConflictingFiles[0]
+	if cf.FilePath != "src/main.go" {
+		t.Errorf("expected parsed file path 'src/main.go', got %s", cf.FilePath)
+	}
+
+	if len(cf.Hunks) == 0 {
+		t.Fatalf("expected hunks to be parsed from diff")
+	}
+
+	hunk := cf.Hunks[0]
+	if hunk.StartLine != 10 {
+		t.Errorf("expected parsed StartLine 10, got %d", hunk.StartLine)
+	}
+
+	if hunk.EndLine != 15 {
+		t.Errorf("expected parsed EndLine 15, got %d", hunk.EndLine)
 	}
 }

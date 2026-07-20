@@ -31,7 +31,7 @@ func NewNotificationService(notifRepo repository.NotificationRepository, eventBu
 }
 
 func (s *notificationService) handleDomainEvent(event models.DomainEvent) {
-	if event.UserID == 0 {
+	if event.UserID == 0 || event.ID != 0 {
 		return
 	}
 	ctx := context.Background()
@@ -43,7 +43,18 @@ func (s *notificationService) handleDomainEvent(event models.DomainEvent) {
 		Link:    event.Link,
 		IsRead:  false,
 	}
-	_ = s.notifRepo.Create(ctx, notif)
+	if err := s.notifRepo.Create(ctx, notif); err == nil {
+		// Republish event with database primary key assigned as ID
+		s.eventBus.Publish(models.DomainEvent{
+			ID:        uint64(notif.ID),
+			Type:      event.Type,
+			UserID:    event.UserID,
+			Title:     event.Title,
+			Message:   event.Message,
+			Link:      event.Link,
+			Timestamp: event.Timestamp,
+		})
+	}
 }
 
 func (s *notificationService) GetUserNotifications(ctx context.Context, userID uint, unreadOnly bool) ([]models.Notification, error) {

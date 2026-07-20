@@ -17,6 +17,7 @@ type SyncService interface {
 	CalculateNextBackoff(attemptCount int) time.Duration
 	StartWorker(ctx context.Context)
 	StopWorker()
+	RestartWorker(ctx context.Context)
 	RetryTask(ctx context.Context, taskID uint) error
 	GetMetrics(ctx context.Context) (map[string]interface{}, error)
 }
@@ -206,6 +207,21 @@ func (s *syncService) handleFailure(ctx context.Context, task *models.SyncTask, 
 	nextRetryAt := time.Now().Add(backoff)
 	s.logger.Warn("sync task failed, scheduling retry", "task_uuid", task.TaskUUID, "attempt", nextAttempt, "next_retry_at", nextRetryAt, "error", errStr)
 	_ = s.syncRepo.MarkRetry(ctx, task.ID, errStr, nextRetryAt)
+}
+
+func (s *syncService) RestartWorker(ctx context.Context) {
+	s.logger.Info("Graceful worker restart initiated: pausing and draining sync worker")
+	s.StopWorker()
+
+	// Reset channels and waitgroup to initial state
+	s.muReset()
+	s.StartWorker(ctx)
+	s.logger.Info("Sync worker successfully restarted and resumed processing")
+}
+
+func (s *syncService) muReset() {
+	s.stopChan = make(chan struct{})
+	s.dispatchChan = make(chan uint, 100)
 }
 
 func (s *syncService) RetryTask(ctx context.Context, taskID uint) error {
