@@ -20,6 +20,7 @@ type Handlers struct {
 	Contributor *handlers.ContributorHandler
 	Health      *handlers.HealthHandler
 	GitHTTP     *handlers.GitHTTPHandler
+	Sync        *handlers.SyncHandler
 }
 
 // Setup registers all API route groups and static file serving on the given Fiber app.
@@ -75,6 +76,13 @@ func Setup(app *fiber.App, h *Handlers, cfg *config.Config) {
 	protected.Get("/repos/:id/files", h.File.BrowseFiles)
 	protected.Get("/repos/:id/files/*", h.File.BrowseFiles)
 	protected.Get("/repos/:id/blob/*", h.File.GetFileContent)
+
+	// Synchronization Dashboard routes
+	protected.Get("/sync/peers", h.Sync.GetPeers)
+	protected.Get("/sync/queue", h.Sync.GetQueue)
+	protected.Get("/sync/metrics", h.Sync.GetMetrics)
+	protected.Post("/sync/retry/:id", h.Sync.RetryTask)
+	protected.Post("/sync/trigger", h.Sync.TriggerSync)
 
 	// ---- Static file serving for the web UI ----
 	app.Static("/", "./ui/dist", fiber.Static{

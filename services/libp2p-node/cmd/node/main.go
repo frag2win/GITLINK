@@ -31,7 +31,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	queue.Init(cfg.RabbitMQURL)
+	queue.Init(cfg.QueueDir)
 
 	// ---- Load or generate peer identity ----
 	privKey, err := identity.LoadOrGenerate(cfg.IdentityKeyPath)
@@ -70,8 +70,8 @@ func main() {
 	}
 
 	// ---- Phase 2: Kademlia DHT ----
-	// Provide the repository CIDs to the DHT (example bootstrap nodes would go here)
-	dhtService, err := discovery.NewDHT(ctx, h, []string{})
+	// Provide the repository CIDs to the DHT
+	dhtService, err := discovery.NewDHT(ctx, h, cfg.BootstrapPeers)
 	if err != nil {
 		slog.Warn("DHT failed to initialize", "error", err)
 	} else {
@@ -94,6 +94,14 @@ func main() {
 	go func() {
 		if err := proxyServer.Start(cfg.ProxySocket); err != nil {
 			slog.Error("local proxy server failed", "error", err)
+		}
+	}()
+
+	// ---- Start IPC Socket Server (Handles INCOMING commands from api-server) ----
+	socketServer := socket.NewServer(h, cfg.SocketPath)
+	go func() {
+		if err := socketServer.Start(ctx); err != nil {
+			slog.Error("socket server failed", "error", err)
 		}
 	}()
 

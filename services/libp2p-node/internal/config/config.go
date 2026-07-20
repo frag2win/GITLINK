@@ -26,7 +26,7 @@ type Config struct {
 	SocketPath string
 
 	ProxySocket string
-	RabbitMQURL string
+	QueueDir    string
 }
 
 // Load reads configuration from environment variables.
@@ -37,7 +37,7 @@ func Load() (*Config, error) {
 		BootstrapPeers:  splitCSV(os.Getenv("P2P_BOOTSTRAP_PEERS")),
 		SocketPath:      envOrDefault("P2P_API_SOCKET", "/tmp/libp2p-node.sock"),
 		ProxySocket:     envOrDefault("PROXY_SOCKET", "/tmp/git-proxy.sock"),
-		RabbitMQURL:     envOrDefault("RABBITMQ_URL", "amqp://guest:guest@localhost:5672/"),
+		QueueDir:        envOrDefault("P2P_QUEUE_DIR", "/app/queue"),
 	}
 
 	if err := cfg.validate(); err != nil {

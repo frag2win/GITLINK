@@ -53,6 +53,7 @@ func main() {
 			&models.BranchProtection{},
 			&models.PullRequest{},
 			&models.AuditLog{},
+			&models.SyncTask{},
 		); err != nil {
 			logger.Error("Failed to run database migrations", "error", err)
 			os.Exit(1)
@@ -68,6 +69,7 @@ func main() {
 	healthRepo := repository.NewHealthRepository(db.Conn)
 	contributorRepo := repository.NewContributorRepository(db.Conn)
 	branchProtectionRepo := repository.NewBranchProtectionRepository(db.Conn)
+	syncRepo := repository.NewSyncRepository(db.Conn)
 
 	auditRepo := repository.NewAuditRepository(db.Conn)
 	txManager := repository.NewTransactionManager(db.Conn)
@@ -79,6 +81,7 @@ func main() {
 		os.Exit(1)
 	}
 	gitClient := ipc.NewGitClient(gitTransport, 30*time.Second)
+	p2pClient := ipc.NewP2PClient(cfg.P2PSocketPath, 30*time.Second)
 
 	// 7. Wire DI Container (Services)
 	authSvc := service.NewAuthService(userRepo, cfg.JWTSecret)
@@ -92,6 +95,12 @@ func main() {
 	prRepo := repository.NewPullRequestRepository(db.Conn)
 	pullSvc := service.NewPullRequestService(prRepo, gitSvc)
 
+	peerSvc := service.NewPeerService(p2pClient)
+	syncSvc := service.NewSyncService(syncRepo, peerSvc, logger)
+	ctx, cancelSyncWorker := context.WithCancel(context.Background())
+	defer cancelSyncWorker()
+	syncSvc.StartWorker(ctx)
+
 	// 8. Wire DI Container (Handlers)
 	diHandlers := &router.Handlers{
 		Auth:        handlers.NewAuthHandler(authSvc),
@@ -104,6 +113,7 @@ func main() {
 		Contributor: handlers.NewContributorHandler(repoSvc, contributorRepo, userRepo),
 		Health:      handlers.NewHealthHandler(healthSvc),
 		GitHTTP:     handlers.NewGitHTTPHandler(gitSvc),
+		Sync:        handlers.NewSyncHandler(syncSvc, peerSvc, syncRepo),
 	}
 
 	// 8. Start IPC Server for Git Hooks
