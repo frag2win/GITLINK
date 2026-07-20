@@ -29,6 +29,8 @@ type syncService struct {
 	stopChan     chan struct{}
 	wg           sync.WaitGroup
 	logger       *slog.Logger
+	mu           sync.Mutex
+	isStopped    bool
 }
 
 func NewSyncService(syncRepo repository.SyncRepository, peerService PeerService, logger *slog.Logger) SyncService {
@@ -93,6 +95,9 @@ func (s *syncService) EnqueueSync(ctx context.Context, repoID uint, repoName, ta
 }
 
 func (s *syncService) StartWorker(ctx context.Context) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.isStopped = false
 	s.wg.Add(2)
 	go s.eventLoop(ctx)
 	go s.recoveryLoop(ctx)
@@ -100,7 +105,15 @@ func (s *syncService) StartWorker(ctx context.Context) {
 }
 
 func (s *syncService) StopWorker() {
+	s.mu.Lock()
+	if s.isStopped {
+		s.mu.Unlock()
+		return
+	}
+	s.isStopped = true
 	close(s.stopChan)
+	s.mu.Unlock()
+
 	s.wg.Wait()
 	s.logger.Info("sync service worker stopped")
 }
@@ -209,8 +222,11 @@ func (s *syncService) RestartWorker(ctx context.Context) {
 }
 
 func (s *syncService) muReset() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.stopChan = make(chan struct{})
 	s.dispatchChan = make(chan uint, 100)
+	s.isStopped = false
 }
 
 func (s *syncService) RetryTask(ctx context.Context, taskID uint) error {
