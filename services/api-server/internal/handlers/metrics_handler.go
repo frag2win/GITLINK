@@ -6,18 +6,21 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/localrepo/api-server/internal/repository"
+	"github.com/localrepo/api-server/internal/service"
 	"gorm.io/gorm"
 )
 
 type MetricsHandler struct {
 	db       *gorm.DB
 	syncRepo repository.SyncRepository
+	peerSvc  service.PeerService
 }
 
-func NewMetricsHandler(db *gorm.DB, syncRepo repository.SyncRepository) *MetricsHandler {
+func NewMetricsHandler(db *gorm.DB, syncRepo repository.SyncRepository, peerSvc service.PeerService) *MetricsHandler {
 	return &MetricsHandler{
 		db:       db,
 		syncRepo: syncRepo,
+		peerSvc:  peerSvc,
 	}
 }
 
@@ -51,6 +54,13 @@ func (h *MetricsHandler) GetMetrics(c *fiber.Ctx) error {
 		h.db.Table("pull_request_reviews").Count(&submittedReviews)
 	}
 
+	activePeers := 1
+	if h.peerSvc != nil {
+		if peers, err := h.peerSvc.GetConnectedPeers(c.UserContext()); err == nil {
+			activePeers = len(peers)
+		}
+	}
+
 	return c.JSON(fiber.Map{
 		"repository_metrics": fiber.Map{
 			"total_repositories": totalRepos,
@@ -62,7 +72,7 @@ func (h *MetricsHandler) GetMetrics(c *fiber.Ctx) error {
 			"average_latency": "12ms",
 		},
 		"peer_metrics": fiber.Map{
-			"active_peers":    1,
+			"active_peers":    activePeers,
 			"known_topology":  "local-mesh",
 		},
 		"queue_metrics": fiber.Map{

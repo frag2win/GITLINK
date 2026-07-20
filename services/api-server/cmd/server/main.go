@@ -133,7 +133,7 @@ func main() {
 		Sync:         handlers.NewSyncHandler(syncSvc, peerSvc, syncRepo),
 		Team:         handlers.NewTeamHandler(teamSvc),
 		Notification: handlers.NewNotificationHandler(notifSvc),
-		Metrics:      handlers.NewMetricsHandler(db.Conn, syncRepo),
+		Metrics:      handlers.NewMetricsHandler(db.Conn, syncRepo, peerSvc),
 		WS:           handlers.NewWSHandler(wsHub, notifSvc),
 		Admin:        handlers.NewAdminHandler(syncRepo, peerSvc, auditSvc, userRepo, syncSvc),
 		Conflict:     handlers.NewConflictHandler(conflictSvc, repoSvc),

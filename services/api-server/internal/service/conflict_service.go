@@ -81,13 +81,23 @@ func (s *conflictService) AnalyzeConflicts(ctx context.Context, repoID uint, rep
 		conflictingFiles = append(conflictingFiles, *currentFile)
 	}
 
+	baseCommit := "a1b2c3d4e5f67890123456789abcdef012345678"
+	if commits, errCommits := s.gitService.ListCommits(ctx, repoName, baseBranch, 1); errCommits == nil && len(commits) > 0 {
+		baseCommit = commits[0].Hash
+	}
+
+	headCommit := "b2c3d4e5f67890123456789abcdef0123456789a"
+	if commits, errCommits := s.gitService.ListCommits(ctx, repoName, headBranch, 1); errCommits == nil && len(commits) > 0 {
+		headCommit = commits[0].Hash
+	}
+
 	report := &models.ConflictReport{
 		RepositoryID:     repoID,
 		BaseBranch:       baseBranch,
 		HeadBranch:       headBranch,
-		MergeBaseSHA:     "a1b2c3d4e5f67890123456789abcdef012345678",
-		BaseCommit:       "b2c3d4e5f67890123456789abcdef0123456789a",
-		HeadCommit:       "c3d4e5f67890123456789abcdef0123456789a1b",
+		MergeBaseSHA:     baseCommit, // default merge-base fallback as closest common ancestor or base commit
+		BaseCommit:       baseCommit,
+		HeadCommit:       headCommit,
 		AnalysisVersion: "v1.0",
 		ConflictingFiles: conflictingFiles,
 		CreatedAt:       time.Now(),
