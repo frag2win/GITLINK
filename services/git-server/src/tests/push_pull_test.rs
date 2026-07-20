@@ -26,7 +26,7 @@ mod tests {
         let result = handle_receive_pack(req, &config).await;
         
         if let Some(err) = &result.error {
-            assert!(!err.message.contains("RepoNotFound"), "Error should be about pack processing, not missing repo");
+            assert!(!err.message.contains("repository not found"), "Error should be about pack processing, not missing repo");
         }
     }
 
@@ -50,7 +50,7 @@ mod tests {
         let result = handle_upload_pack(req, &config).await;
         
         if let Some(err) = &result.error {
-            assert!(!err.message.contains("RepoNotFound"), "Error should be about pack processing, not missing repo");
+            assert!(!err.message.contains("repository not found"), "Error should be about pack processing, not missing repo");
         }
     }
 }

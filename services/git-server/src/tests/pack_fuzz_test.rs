@@ -16,7 +16,7 @@ mod tests {
         let result = receive_pack(repos_path, repo_name, &corrupt_data);
         
         let err = result.unwrap_err();
-        assert!(!err.to_string().contains("RepoNotFound"), "Error should be about parsing, not missing repo");
+        assert!(!err.to_string().contains("repository not found"), "Error should be about parsing, not missing repo");
     }
 
     #[test]
@@ -30,7 +30,7 @@ mod tests {
         let result = receive_pack(repos_path, repo_name, &truncated_data);
         
         let err = result.unwrap_err();
-        assert!(!err.to_string().contains("RepoNotFound"), "Error should be about parsing, not missing repo");
+        assert!(!err.to_string().contains("repository not found"), "Error should be about parsing, not missing repo");
     }
 
     #[test]
@@ -48,6 +48,6 @@ mod tests {
         let result = receive_pack(repos_path, repo_name, &invalid_checksum_data);
         
         let err = result.unwrap_err();
-        assert!(!err.to_string().contains("RepoNotFound"), "Error should be about parsing, not missing repo");
+        assert!(!err.to_string().contains("repository not found"), "Error should be about parsing, not missing repo");
     }
 }
