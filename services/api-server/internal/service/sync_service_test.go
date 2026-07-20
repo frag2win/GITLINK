@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/localrepo/api-server/internal/ipc"
 	"github.com/localrepo/api-server/internal/models"
 	"github.com/localrepo/api-server/internal/repository"
 	"github.com/localrepo/api-server/internal/service"
@@ -37,8 +38,9 @@ func TestExponentialBackoffCalculation(t *testing.T) {
 // mockSyncRepository implements a lightweight in-memory SyncRepository for testing concurrency and worker dispatch
 type mockSyncRepository struct {
 	repository.SyncRepository
-	tasks map[uint]*models.SyncTask
-	mu    sync.Mutex
+	tasks        map[uint]*models.SyncTask
+	mu           sync.Mutex
+	processedIDs chan uint // optional: receives task IDs that reach MarkCompleted
 }
 
 func (m *mockSyncRepository) Create(ctx context.Context, task *models.SyncTask) error {
@@ -73,8 +75,61 @@ func (m *mockSyncRepository) ClaimTask(ctx context.Context, id uint) (bool, erro
 	return false, nil
 }
 
+func (m *mockSyncRepository) MarkCompleted(ctx context.Context, id uint, bytesTransferred int64, durationMs int64) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if task, ok := m.tasks[id]; ok {
+		task.Status = models.SyncTaskCompleted
+	}
+	if m.processedIDs != nil {
+		select {
+		case m.processedIDs <- id:
+		default:
+		}
+	}
+	return nil
+}
+
+func (m *mockSyncRepository) MarkFailed(ctx context.Context, id uint, errStr string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if task, ok := m.tasks[id]; ok {
+		task.Status = models.SyncTaskFailed
+	}
+	return nil
+}
+
+func (m *mockSyncRepository) MarkRetry(ctx context.Context, id uint, errStr string, nextRetry time.Time) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if task, ok := m.tasks[id]; ok {
+		task.Status = models.SyncTaskRetryScheduled
+	}
+	return nil
+}
+
+func (m *mockSyncRepository) UpdateHeartbeat(ctx context.Context, id uint) error { return nil }
+
 type mockPeerService struct {
 	service.PeerService
+}
+
+// mockPeerServiceTracking is a PeerService mock that reports successful dispatches
+// via processedIDs, allowing TestSyncWorkerDirectTaskLookup to verify which task
+// IDs actually reached DispatchSync (i.e., were correctly identified by processTask).
+type mockPeerServiceTracking struct {
+	service.PeerService
+	processedIDs chan uint
+}
+
+func (m *mockPeerServiceTracking) DispatchSync(ctx context.Context, task *models.SyncTask) (*ipc.P2PSyncResponse, error) {
+	if m.processedIDs != nil {
+		select {
+		case m.processedIDs <- task.ID:
+		default:
+		}
+	}
+	return &ipc.P2PSyncResponse{Status: "COMPLETED", BytesTransferred: 0, DurationMs: 1}, nil
 }
 
 func TestSyncWorkerGracefulRestartSafety(t *testing.T) {
@@ -124,42 +179,60 @@ func TestSyncWorkerGracefulRestartSafety(t *testing.T) {
 	restartWG.Wait()
 }
 
+// TestSyncWorkerDirectTaskLookup verifies that when two tasks exist in the queue,
+// the sync worker correctly dispatches the specific task it claimed (by ID) rather
+// than always re-fetching the newest row.
+//
+// This is a regression test for the §7 bug where processTask used
+// ListTasks(limit=1, offset=0) — which always returned the newest row —
+// instead of GetByID(taskID). If that bug were reintroduced, TaskA would never
+// be dispatched once TaskB exists (it would always be stuck in "running" after claim).
 func TestSyncWorkerDirectTaskLookup(t *testing.T) {
+	// processedIDs records which task IDs were actually dispatched to DispatchSync.
+	processedIDs := make(chan uint, 10)
+
 	mockRepo := &mockSyncRepository{
-		tasks: make(map[uint]*models.SyncTask),
+		tasks:        make(map[uint]*models.SyncTask),
+		processedIDs: processedIDs,
 	}
-	mockPeers := &mockPeerService{}
-	_ = service.NewSyncService(mockRepo, mockPeers, nil)
+	mockPeers := &mockPeerServiceTracking{processedIDs: processedIDs}
 
-	ctx := context.Background()
+	svc := service.NewSyncService(mockRepo, mockPeers, nil)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	svc.StartWorker(ctx)
+	defer svc.StopWorker()
 
-	// Enqueue Task A
-	taskA := &models.SyncTask{
-		Status:   models.SyncTaskPending,
-		RepoName: "repo-a",
-	}
-	_ = mockRepo.Create(ctx, taskA)
-
-	// Enqueue Task B (Task B is newer)
-	taskB := &models.SyncTask{
-		Status:   models.SyncTaskPending,
-		RepoName: "repo-b",
-	}
-	_ = mockRepo.Create(ctx, taskB)
-
-	// Claim Task A
-	claimed, err := mockRepo.ClaimTask(ctx, taskA.ID)
-	if err != nil || !claimed {
-		t.Fatalf("expected Task A to be claimed successfully")
-	}
-
-	// Verify that querying with direct ID returns Task A
-	fetchedTask, err := mockRepo.GetByID(ctx, taskA.ID)
+	// Enqueue Task A first (older, lower ID)
+	taskA, err := svc.EnqueueSync(ctx, 1, "repo-a", "peer-1", 5, "corr-a")
 	if err != nil {
-		t.Fatalf("expected to fetch Task A successfully, got error: %v", err)
+		t.Fatalf("EnqueueSync taskA: %v", err)
 	}
 
-	if fetchedTask.RepoName != "repo-a" {
-		t.Errorf("expected fetched task repo to be 'repo-a', got %q", fetchedTask.RepoName)
+	// Enqueue Task B (newer, higher ID — this is what the old ListTasks bug returned)
+	_, err = svc.EnqueueSync(ctx, 2, "repo-b", "peer-2", 5, "corr-b")
+	if err != nil {
+		t.Fatalf("EnqueueSync taskB: %v", err)
+	}
+
+	// Wait for both tasks to be dispatched. With the old bug, TaskA would be claimed
+	// then immediately abandoned (task == nil after list mismatch), so only TaskB
+	// would ever appear in processedIDs. The correct fix dispatches both.
+	seen := make(map[uint]bool)
+	deadline := time.After(3 * time.Second)
+	for len(seen) < 2 {
+		select {
+		case id := <-processedIDs:
+			seen[id] = true
+		case <-deadline:
+			t.Fatalf("timeout: only %d of 2 tasks dispatched; seen=%v (regression: processTask may be fetching wrong task)", len(seen), seen)
+		}
+	}
+
+	// The critical assertion: TaskA (the older, lower-ID task) MUST have been
+	// dispatched. The old ListTasks bug would skip it once TaskB existed.
+	if !seen[taskA.ID] {
+		t.Errorf("TaskA (id=%d, repo-a) was never dispatched — regression: processTask fetched wrong task by ID", taskA.ID)
 	}
 }
+

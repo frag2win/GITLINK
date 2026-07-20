@@ -4,3 +4,4 @@ pub mod commit_test;
 pub mod merge_test;
 pub mod pack_fuzz_test;
 pub mod push_pull_test;
+pub mod http_handler_test;
