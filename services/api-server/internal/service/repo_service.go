@@ -62,7 +62,7 @@ func (s *repoService) CreateRepository(ctx context.Context, ownerID uint, name, 
 	}
 
 	// 2. Database transaction (Insert Repo, Insert Ownership, Audit Log)
-	err = s.txManager.WithTransaction(ctx, func(txCtx context.Context) error {
+	err = s.txManager.RunInTransaction(ctx, func(txCtx context.Context) error {
 		repo := &models.Repository{
 			Name:        name,
 			Description: description,
@@ -99,7 +99,7 @@ func (s *repoService) DeleteRepository(ctx context.Context, name string) error {
 	}
 
 	// 1. Database Transaction (Audit + Remove)
-	err = s.txManager.WithTransaction(ctx, func(txCtx context.Context) error {
+	err = s.txManager.RunInTransaction(ctx, func(txCtx context.Context) error {
 		if err := s.auditService.LogAction(txCtx, "DELETE_REPO", name, "system", "Deleted repository"); err != nil {
 			return fmt.Errorf("audit log: %w", err)
 		}

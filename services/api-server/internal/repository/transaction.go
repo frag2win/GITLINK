@@ -10,7 +10,7 @@ type txKey struct{}
 
 // TransactionManager handles atomic database operations.
 type TransactionManager interface {
-	WithTransaction(ctx context.Context, fn func(txCtx context.Context) error) error
+	RunInTransaction(ctx context.Context, fn func(txCtx context.Context) error) error
 }
 
 type transactionManager struct {
@@ -22,9 +22,9 @@ func NewTransactionManager(db *gorm.DB) TransactionManager {
 	return &transactionManager{db: db}
 }
 
-// WithTransaction executes the given function within a database transaction.
+// RunInTransaction executes the given function within a database transaction.
 // The transaction is injected into the context passed to the function.
-func (tm *transactionManager) WithTransaction(ctx context.Context, fn func(txCtx context.Context) error) error {
+func (tm *transactionManager) RunInTransaction(ctx context.Context, fn func(txCtx context.Context) error) error {
 	return tm.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		txCtx := context.WithValue(ctx, txKey{}, tx)
 		return fn(txCtx)

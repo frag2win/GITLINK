@@ -5,8 +5,8 @@ import (
 	"fmt"
 
 	"github.com/localrepo/api-server/internal/models"
+	"github.com/localrepo/api-server/internal/repository"
 	pb "github.com/localrepo/api-server/proto/generated"
-	"gorm.io/gorm"
 )
 
 type PullRequestService interface {
@@ -17,41 +17,33 @@ type PullRequestService interface {
 }
 
 type pullRequestService struct {
-	db         *gorm.DB
+	repo       repository.PullRequestRepository
 	gitService GitService
 }
 
-func NewPullRequestService(db *gorm.DB, gitService GitService) PullRequestService {
+func NewPullRequestService(repo repository.PullRequestRepository, gitService GitService) PullRequestService {
 	return &pullRequestService{
-		db:         db,
+		repo:       repo,
 		gitService: gitService,
 	}
 }
 
 func (s *pullRequestService) CreatePullRequest(ctx context.Context, pr *models.PullRequest) error {
 	pr.Status = "open"
-	return s.db.WithContext(ctx).Create(pr).Error
+	return s.repo.Create(ctx, pr)
 }
 
 func (s *pullRequestService) ListPullRequests(ctx context.Context, repoID uint) ([]models.PullRequest, error) {
-	var prs []models.PullRequest
-	// Preload Author for frontend to show who created it
-	err := s.db.WithContext(ctx).Where("repository_id = ?", repoID).Preload("Author").Find(&prs).Error
-	return prs, err
+	return s.repo.ListByRepo(ctx, repoID)
 }
 
 func (s *pullRequestService) GetPullRequestByID(ctx context.Context, prID uint) (*models.PullRequest, error) {
-	var pr models.PullRequest
-	err := s.db.WithContext(ctx).Preload("Author").First(&pr, prID).Error
-	if err != nil {
-		return nil, err
-	}
-	return &pr, nil
+	return s.repo.GetByID(ctx, prID)
 }
 
 func (s *pullRequestService) MergePullRequest(ctx context.Context, prID uint, repoName string, authorName, authorEmail string) (string, error) {
-	var pr models.PullRequest
-	if err := s.db.WithContext(ctx).First(&pr, prID).Error; err != nil {
+	pr, err := s.repo.GetByID(ctx, prID)
+	if err != nil {
 		return "", err
 	}
 
@@ -76,7 +68,7 @@ func (s *pullRequestService) MergePullRequest(ctx context.Context, prID uint, re
 
 	// 2. Update DB status
 	pr.Status = "merged"
-	if err := s.db.WithContext(ctx).Save(&pr).Error; err != nil {
+	if err := s.repo.Update(ctx, pr); err != nil {
 		return "", fmt.Errorf("failed to update pull request status: %w", err)
 	}
 

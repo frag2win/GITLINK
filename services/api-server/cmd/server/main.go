@@ -89,7 +89,8 @@ func main() {
 	healthSvc := service.NewHealthService(healthRepo)
 	branchProtectSvc := service.NewBranchProtectionService(branchProtectionRepo)
 	authzSvc := service.NewAuthorizationService(repoRepo, contributorRepo, branchProtectionRepo)
-	pullSvc := service.NewPullRequestService(db.Conn, gitSvc)
+	prRepo := repository.NewPullRequestRepository(db.Conn)
+	pullSvc := service.NewPullRequestService(prRepo, gitSvc)
 
 	// 8. Wire DI Container (Handlers)
 	diHandlers := &router.Handlers{
