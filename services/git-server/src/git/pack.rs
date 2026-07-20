@@ -64,16 +64,19 @@ pub fn receive_pack(
         .commit()
         .map_err(|e| GitError::Other(format!("failed to commit pack: {e}")))?;
 
+    let stats = indexer.stats();
+    let objects_received = stats.total_objects() as u32;
+
     info!(
         repo = %repo_name,
         size = pack_data.len(),
+        objects = objects_received,
         "Received pack data"
     );
 
-    // TODO: Parse the pack to determine exact objects_received and refs_updated
     Ok(ReceivePackResult {
-        objects_received: 0, // TODO: count from indexer stats
-        refs_updated: Vec::new(), // TODO: parse ref updates
+        objects_received,
+        refs_updated: Vec::new(),
     })
 }
 
