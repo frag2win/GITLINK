@@ -161,19 +161,8 @@ func (s *syncService) processTask(ctx context.Context, taskID uint) {
 	}
 
 	// Fetch fresh task record
-	var task *models.SyncTask
-	// Quick query to get details
-	tasks, _, err := s.syncRepo.ListTasks(ctx, 1, 0, "")
-	if err != nil || len(tasks) == 0 {
-		return
-	}
-	for _, t := range tasks {
-		if t.ID == taskID {
-			task = &t
-			break
-		}
-	}
-	if task == nil {
+	task, err := s.syncRepo.GetByID(ctx, taskID)
+	if err != nil || task == nil {
 		return
 	}
 

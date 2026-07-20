@@ -12,14 +12,16 @@ import (
 )
 
 type PullRequestHandler struct {
-	pullSvc     service.PullRequestService
-	repoService service.RepoService
+	pullSvc          service.PullRequestService
+	repoService      service.RepoService
+	authorizationSvc service.AuthorizationService
 }
 
-func NewPullRequestHandler(pullSvc service.PullRequestService, repoService service.RepoService) *PullRequestHandler {
+func NewPullRequestHandler(pullSvc service.PullRequestService, repoService service.RepoService, authorizationSvc service.AuthorizationService) *PullRequestHandler {
 	return &PullRequestHandler{
-		pullSvc:     pullSvc,
-		repoService: repoService,
+		pullSvc:          pullSvc,
+		repoService:      repoService,
+		authorizationSvc: authorizationSvc,
 	}
 }
 
@@ -43,6 +45,18 @@ func (h *PullRequestHandler) getAuthorizedRepo(c *fiber.Ctx) (*models.Repository
 			return nil, c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Repository not found"})
 		}
 		return nil, c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	isAllowed := false
+	var authErr error
+	if c.Method() == fiber.MethodGet {
+		isAllowed, authErr = h.authorizationSvc.AuthorizeRead(c.Context(), userID, repo.ID)
+	} else {
+		isAllowed, authErr = h.authorizationSvc.AuthorizeWrite(c.Context(), userID, repo.ID)
+	}
+
+	if authErr != nil || !isAllowed {
+		return nil, c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "Forbidden: Access denied"})
 	}
 
 	return repo, nil

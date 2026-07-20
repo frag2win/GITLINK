@@ -7,6 +7,17 @@ use crate::socket::protocol::{
 };
 
 pub async fn handle_info_refs(req: InfoRefsRequest, config: &Config) -> GitCommandResponse {
+    if let Err(e) = crate::git::sanitize::validate_repo_name(&req.repo_name) {
+        return GitCommandResponse {
+            protocol_version: 1,
+            error: Some(crate::socket::protocol::GitError {
+                code: "ValidationError".to_string(),
+                message: e.to_string(),
+            }),
+            result: None,
+        };
+    }
+
     let dir_name = if req.repo_name.ends_with(".git") {
         req.repo_name.clone()
     } else {
@@ -30,6 +41,17 @@ pub async fn handle_info_refs(req: InfoRefsRequest, config: &Config) -> GitComma
 }
 
 pub async fn handle_upload_pack(req: UploadPackRequest, config: &Config) -> GitCommandResponse {
+    if let Err(e) = crate::git::sanitize::validate_repo_name(&req.repo_name) {
+        return GitCommandResponse {
+            protocol_version: 1,
+            error: Some(crate::socket::protocol::GitError {
+                code: "ValidationError".to_string(),
+                message: e.to_string(),
+            }),
+            result: None,
+        };
+    }
+
     let dir_name = if req.repo_name.ends_with(".git") {
         req.repo_name.clone()
     } else {
@@ -53,6 +75,17 @@ pub async fn handle_upload_pack(req: UploadPackRequest, config: &Config) -> GitC
 }
 
 pub async fn handle_receive_pack(req: ReceivePackRequest, config: &Config) -> GitCommandResponse {
+    if let Err(e) = crate::git::sanitize::validate_repo_name(&req.repo_name) {
+        return GitCommandResponse {
+            protocol_version: 1,
+            error: Some(crate::socket::protocol::GitError {
+                code: "ValidationError".to_string(),
+                message: e.to_string(),
+            }),
+            result: None,
+        };
+    }
+
     let dir_name = if req.repo_name.ends_with(".git") {
         req.repo_name.clone()
     } else {

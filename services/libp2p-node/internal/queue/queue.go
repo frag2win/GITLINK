@@ -133,6 +133,18 @@ func ExecuteSync(ctx context.Context, h host.Host, taskUUID, repoName, peerIDStr
 	}
 }
 
+func isValidName(s string) bool {
+	if s == "" || len(s) > 100 {
+		return false
+	}
+	for _, r := range s {
+		if !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_' || r == '-' || r == '.') {
+			return false
+		}
+	}
+	return !strings.Contains(s, "..")
+}
+
 // HandleOfflinePush processes a Git push request locally when the remote peer is offline.
 func HandleOfflinePush(w http.ResponseWriter, r *http.Request, peerIDStr string, repoPath string, h host.Host, proxyPort string) {
 	mu.Lock()
@@ -150,6 +162,11 @@ func HandleOfflinePush(w http.ResponseWriter, r *http.Request, peerIDStr string,
 
 	repoName := strings.TrimPrefix(repoPath, "/")
 	repoName = strings.Split(repoName, "/")[0]
+
+	if !isValidName(peerIDStr) || !isValidName(repoName) {
+		http.Error(w, "Invalid path parameters", http.StatusBadRequest)
+		return
+	}
 
 	localRepoPath := filepath.Join(queueDir, peerIDStr, repoName+".git")
 

@@ -11,14 +11,16 @@ import (
 )
 
 type CommitHandler struct {
-	gitService  service.GitService
-	repoService service.RepoService
+	gitService       service.GitService
+	repoService      service.RepoService
+	authorizationSvc service.AuthorizationService
 }
 
-func NewCommitHandler(gitService service.GitService, repoService service.RepoService) *CommitHandler {
+func NewCommitHandler(gitService service.GitService, repoService service.RepoService, authorizationSvc service.AuthorizationService) *CommitHandler {
 	return &CommitHandler{
-		gitService:  gitService,
-		repoService: repoService,
+		gitService:       gitService,
+		repoService:      repoService,
+		authorizationSvc: authorizationSvc,
 	}
 }
 
@@ -40,6 +42,18 @@ func (h *CommitHandler) getAuthorizedRepo(c *fiber.Ctx) (string, error) {
 			return "", c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Repository not found"})
 		}
 		return "", c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	isAllowed := false
+	var authErr error
+	if c.Method() == fiber.MethodGet {
+		isAllowed, authErr = h.authorizationSvc.AuthorizeRead(c.Context(), userID, repo.ID)
+	} else {
+		isAllowed, authErr = h.authorizationSvc.AuthorizeWrite(c.Context(), userID, repo.ID)
+	}
+
+	if authErr != nil || !isAllowed {
+		return "", c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "Forbidden: Access denied"})
 	}
 
 	return repo.Name, nil

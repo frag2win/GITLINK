@@ -15,20 +15,23 @@ import (
 )
 
 type ContributorHandler struct {
-	repoService     service.RepoService
-	contributorRepo repository.ContributorRepository
-	userRepo        repository.UserRepository
+	repoService      service.RepoService
+	contributorRepo  repository.ContributorRepository
+	userRepo         repository.UserRepository
+	authorizationSvc service.AuthorizationService
 }
 
 func NewContributorHandler(
 	repoService service.RepoService,
 	contributorRepo repository.ContributorRepository,
 	userRepo repository.UserRepository,
+	authorizationSvc service.AuthorizationService,
 ) *ContributorHandler {
 	return &ContributorHandler{
-		repoService:     repoService,
-		contributorRepo: contributorRepo,
-		userRepo:        userRepo,
+		repoService:      repoService,
+		contributorRepo:  contributorRepo,
+		userRepo:         userRepo,
+		authorizationSvc: authorizationSvc,
 	}
 }
 
@@ -62,6 +65,18 @@ func (h *ContributorHandler) getAuthorizedRepo(c *fiber.Ctx) (*models.Repository
 			return nil, c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Repository not found"})
 		}
 		return nil, c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	isAllowed := false
+	var authErr error
+	if c.Method() == fiber.MethodGet {
+		isAllowed, authErr = h.authorizationSvc.AuthorizeRead(c.Context(), userID, repo.ID)
+	} else {
+		isAllowed, authErr = h.authorizationSvc.AuthorizeWrite(c.Context(), userID, repo.ID)
+	}
+
+	if authErr != nil || !isAllowed {
+		return nil, c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "Forbidden: Access denied"})
 	}
 
 	return repo, nil

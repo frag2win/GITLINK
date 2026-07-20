@@ -51,19 +51,16 @@ func (h *BranchHandler) getAuthorizedRepo(c *fiber.Ctx) (string, uint, error) {
 		return "", 0, c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
 	}
 
-	// Read check (collaborator check can be simple)
-	// For now, if the repository is private we enforce they must be owner or collaborator.
-	// But let's check if the user is owner or collaborator.
-	// If GetRepoByID returns no error, they might have access, but let's check specifically.
-	// We can check s.repoRepo.List to see if they have access.
-	// For simplicity, let's allow access if they are owner or collaborator.
-	// Wait, we can verify OwnerID or collaborator status.
-	if repo.OwnerID != userID {
-		// Verify collaborator status
-		// For reading branches, any collaborator is allowed
-		// Let's just check if they are owner. In a full system we check the collaborator table.
-		// Let's check using a quick GORM query or just allow if they are collaborator.
-		// Since we want this to be real, let's verify if they have access.
+	isAllowed := false
+	var authErr error
+	if c.Method() == fiber.MethodGet {
+		isAllowed, authErr = h.authorizationSvc.AuthorizeRead(c.Context(), userID, repo.ID)
+	} else {
+		isAllowed, authErr = h.authorizationSvc.AuthorizeWrite(c.Context(), userID, repo.ID)
+	}
+
+	if authErr != nil || !isAllowed {
+		return "", 0, c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "Forbidden: Access denied"})
 	}
 
 	return repo.Name, uint(repoID), nil

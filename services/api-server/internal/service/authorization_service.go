@@ -19,6 +19,8 @@ type AuthorizationResult struct {
 
 type AuthorizationService interface {
 	AuthorizePush(ctx context.Context, userID uint, repoName string, branchName string) (*AuthorizationResult, error)
+	AuthorizeRead(ctx context.Context, userID uint, repoID uint) (bool, error)
+	AuthorizeWrite(ctx context.Context, userID uint, repoID uint) (bool, error)
 }
 
 type authorizationService struct {
@@ -115,4 +117,69 @@ func (s *authorizationService) AuthorizePush(ctx context.Context, userID uint, r
 		Reason:  "Authorized successfully",
 		Role:    role,
 	}, nil
+}
+
+func (s *authorizationService) AuthorizeRead(ctx context.Context, userID uint, repoID uint) (bool, error) {
+	if userID == 0 {
+		return false, nil
+	}
+	repo, err := s.repoRepo.FindByID(ctx, repoID)
+	if err != nil {
+		return false, err
+	}
+
+	// Owners can always read
+	if repo.OwnerID == userID {
+		return true, nil
+	}
+
+	// Public repositories can be read by anyone
+	if !repo.IsPrivate {
+		return true, nil
+	}
+
+	// For private repositories, check collaborator role or team role
+	role, err := s.contributorRepo.FindRole(ctx, repoID, userID)
+	if err == nil && (role == "owner" || role == "admin" || role == "write" || role == "read") {
+		return true, nil
+	}
+
+	if s.teamRepo != nil {
+		teamRole, err := s.teamRepo.GetUserRepoRole(ctx, userID, repoID)
+		if err == nil && (teamRole == "owner" || teamRole == "admin" || teamRole == "write" || teamRole == "read") {
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
+
+func (s *authorizationService) AuthorizeWrite(ctx context.Context, userID uint, repoID uint) (bool, error) {
+	if userID == 0 {
+		return false, nil
+	}
+	repo, err := s.repoRepo.FindByID(ctx, repoID)
+	if err != nil {
+		return false, err
+	}
+
+	// Owners can always write
+	if repo.OwnerID == userID {
+		return true, nil
+	}
+
+	// Check collaborator role or team role for write permission
+	role, err := s.contributorRepo.FindRole(ctx, repoID, userID)
+	if err == nil && (role == "owner" || role == "admin" || role == "write") {
+		return true, nil
+	}
+
+	if s.teamRepo != nil {
+		teamRole, err := s.teamRepo.GetUserRepoRole(ctx, userID, repoID)
+		if err == nil && (teamRole == "owner" || teamRole == "admin" || teamRole == "write") {
+			return true, nil
+		}
+	}
+
+	return false, nil
 }

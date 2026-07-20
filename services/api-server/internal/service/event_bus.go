@@ -34,6 +34,11 @@ func (b *eventBus) Publish(event models.DomainEvent) {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 	for _, l := range b.listeners {
-		go l(event)
+		go func(listener EventListener) {
+			defer func() {
+				_ = recover() // Prevents unhandled listener panics from crashing api-server
+			}()
+			listener(event)
+		}(l)
 	}
 }

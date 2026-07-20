@@ -11,6 +11,7 @@ import (
 
 type SyncRepository interface {
 	Create(ctx context.Context, task *models.SyncTask) error
+	GetByID(ctx context.Context, id uint) (*models.SyncTask, error)
 	GetByUUID(ctx context.Context, uuid string) (*models.SyncTask, error)
 	ClaimTask(ctx context.Context, id uint) (bool, error)
 	GetNextTasks(ctx context.Context, limit int) ([]models.SyncTask, error)
@@ -35,6 +36,15 @@ func NewSyncRepository(db *gorm.DB) SyncRepository {
 
 func (r *syncRepository) Create(ctx context.Context, task *models.SyncTask) error {
 	return r.db.WithContext(ctx).Create(task).Error
+}
+
+func (r *syncRepository) GetByID(ctx context.Context, id uint) (*models.SyncTask, error) {
+	var task models.SyncTask
+	err := r.db.WithContext(ctx).First(&task, id).Error
+	if err != nil {
+		return nil, err
+	}
+	return &task, nil
 }
 
 func (r *syncRepository) GetByUUID(ctx context.Context, uuid string) (*models.SyncTask, error) {
