@@ -54,6 +54,14 @@ func main() {
 			&models.PullRequest{},
 			&models.AuditLog{},
 			&models.SyncTask{},
+			&models.PullRequestReview{},
+			&models.ReviewThread{},
+			&models.PullRequestReviewComment{},
+			&models.Organization{},
+			&models.Team{},
+			&models.TeamMember{},
+			&models.TeamRepositoryPermission{},
+			&models.Notification{},
 		); err != nil {
 			logger.Error("Failed to run database migrations", "error", err)
 			os.Exit(1)
@@ -70,11 +78,14 @@ func main() {
 	contributorRepo := repository.NewContributorRepository(db.Conn)
 	branchProtectionRepo := repository.NewBranchProtectionRepository(db.Conn)
 	syncRepo := repository.NewSyncRepository(db.Conn)
+	prReviewRepo := repository.NewPRReviewRepository(db.Conn)
+	teamRepo := repository.NewTeamRepository(db.Conn)
+	notifRepo := repository.NewNotificationRepository(db.Conn)
 
 	auditRepo := repository.NewAuditRepository(db.Conn)
 	txManager := repository.NewTransactionManager(db.Conn)
 
-	// 6. Wire DI Container (Clients)
+	// 6. Wire DI Container (Clients & EventBus)
 	gitTransport, err := ipc.NewTransport(cfg.GitIPCNetwork, cfg.GitIPCAddress, 30*time.Second)
 	if err != nil {
 		logger.Error("Failed to initialize git IPC transport", "error", err)
@@ -82,6 +93,7 @@ func main() {
 	}
 	gitClient := ipc.NewGitClient(gitTransport, 30*time.Second)
 	p2pClient := ipc.NewP2PClient(cfg.P2PSocketPath, 30*time.Second)
+	eventBus := service.NewEventBus()
 
 	// 7. Wire DI Container (Services)
 	authSvc := service.NewAuthService(userRepo, cfg.JWTSecret)
@@ -93,7 +105,9 @@ func main() {
 	branchProtectSvc := service.NewBranchProtectionService(branchProtectionRepo)
 	authzSvc := service.NewAuthorizationService(repoRepo, contributorRepo, branchProtectionRepo)
 	prRepo := repository.NewPullRequestRepository(db.Conn)
-	pullSvc := service.NewPullRequestService(prRepo, gitSvc)
+	pullSvc := service.NewPullRequestService(prRepo, prReviewRepo, gitSvc, eventBus)
+	teamSvc := service.NewTeamService(teamRepo)
+	notifSvc := service.NewNotificationService(notifRepo, eventBus)
 
 	peerSvc := service.NewPeerService(p2pClient)
 	syncSvc := service.NewSyncService(syncRepo, peerSvc, logger)
@@ -103,17 +117,19 @@ func main() {
 
 	// 8. Wire DI Container (Handlers)
 	diHandlers := &router.Handlers{
-		Auth:        handlers.NewAuthHandler(authSvc),
-		SSH:         handlers.NewSSHHandler(sshSvc),
-		Repo:        handlers.NewRepoHandler(repoSvc),
-		Branch:      handlers.NewBranchHandler(gitSvc, repoSvc, branchProtectSvc, authzSvc),
-		Pull:        handlers.NewPullRequestHandler(pullSvc, repoSvc),
-		Commit:      handlers.NewCommitHandler(gitSvc, repoSvc),
-		File:        handlers.NewFileHandler(gitSvc, repoSvc),
-		Contributor: handlers.NewContributorHandler(repoSvc, contributorRepo, userRepo),
-		Health:      handlers.NewHealthHandler(healthSvc),
-		GitHTTP:     handlers.NewGitHTTPHandler(gitSvc),
-		Sync:        handlers.NewSyncHandler(syncSvc, peerSvc, syncRepo),
+		Auth:         handlers.NewAuthHandler(authSvc),
+		SSH:          handlers.NewSSHHandler(sshSvc),
+		Repo:         handlers.NewRepoHandler(repoSvc),
+		Branch:       handlers.NewBranchHandler(gitSvc, repoSvc, branchProtectSvc, authzSvc),
+		Pull:         handlers.NewPullRequestHandler(pullSvc, repoSvc),
+		Commit:       handlers.NewCommitHandler(gitSvc, repoSvc),
+		File:         handlers.NewFileHandler(gitSvc, repoSvc),
+		Contributor:  handlers.NewContributorHandler(repoSvc, contributorRepo, userRepo),
+		Health:       handlers.NewHealthHandler(healthSvc),
+		GitHTTP:      handlers.NewGitHTTPHandler(gitSvc),
+		Sync:         handlers.NewSyncHandler(syncSvc, peerSvc, syncRepo),
+		Team:         handlers.NewTeamHandler(teamSvc),
+		Notification: handlers.NewNotificationHandler(notifSvc),
 	}
 
 	// 8. Start IPC Server for Git Hooks

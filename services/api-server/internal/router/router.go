@@ -20,7 +20,9 @@ type Handlers struct {
 	Contributor *handlers.ContributorHandler
 	Health      *handlers.HealthHandler
 	GitHTTP     *handlers.GitHTTPHandler
-	Sync        *handlers.SyncHandler
+	Sync         *handlers.SyncHandler
+	Team         *handlers.TeamHandler
+	Notification *handlers.NotificationHandler
 }
 
 // Setup registers all API route groups and static file serving on the given Fiber app.
@@ -58,10 +60,22 @@ func Setup(app *fiber.App, h *Handlers, cfg *config.Config) {
 	protected.Delete("/repos/:id/branches/:branch", h.Branch.DeleteBranch)
 	protected.Post("/repos/:id/branches/:branch/protect", h.Branch.ProtectBranch)
 
-	// Pull Request routes
+	// Pull Request routes & Code Reviews
 	protected.Get("/repos/:id/pulls", h.Pull.ListPullRequests)
 	protected.Post("/repos/:id/pulls", h.Pull.CreatePullRequest)
 	protected.Post("/repos/:id/pulls/:pr_id/merge", h.Pull.MergePullRequest)
+	protected.Get("/repos/:id/pulls/:pr_id/reviews", h.Pull.GetReviews)
+	protected.Post("/repos/:id/pulls/:pr_id/reviews", h.Pull.SubmitReview)
+	protected.Post("/repos/:id/pulls/:pr_id/threads/:thread_id/resolve", h.Pull.ResolveThread)
+
+	// Organization & Team RBAC routes
+	protected.Post("/orgs", h.Team.CreateOrganization)
+	protected.Post("/teams", h.Team.CreateTeam)
+	protected.Post("/teams/:id/members", h.Team.AddMember)
+
+	// Notification routes
+	protected.Get("/notifications", h.Notification.GetNotifications)
+	protected.Patch("/notifications/:id/read", h.Notification.MarkRead)
 
 	// Commit routes
 	protected.Get("/repos/:id/commits", h.Commit.ListCommits)

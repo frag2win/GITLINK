@@ -134,6 +134,76 @@ func (h *PullRequestHandler) CreatePullRequest(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusCreated).JSON(dto)
 }
 
+type SubmitReviewRequest struct {
+	State             models.ReviewState                `json:"state"`
+	Body              string                            `json:"body"`
+	ReviewedCommitSHA string                            `json:"reviewed_commit_sha"`
+	Comments          []models.PullRequestReviewComment `json:"comments"`
+}
+
+func (h *PullRequestHandler) SubmitReview(c *fiber.Ctx) error {
+	userID := middleware.UserIDFromContext(c)
+	if userID == 0 {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "Unauthorized"})
+	}
+
+	prIDStr := c.Params("pr_id")
+	prID, err := strconv.ParseUint(prIDStr, 10, 32)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid PR ID"})
+	}
+
+	var req SubmitReviewRequest
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid request body"})
+	}
+
+	review, err := h.pullSvc.SubmitReview(c.Context(), uint(prID), userID, req.State, req.Body, req.ReviewedCommitSHA, req.Comments)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	return c.Status(fiber.StatusCreated).JSON(review)
+}
+
+func (h *PullRequestHandler) GetReviews(c *fiber.Ctx) error {
+	prIDStr := c.Params("pr_id")
+	prID, err := strconv.ParseUint(prIDStr, 10, 32)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid PR ID"})
+	}
+
+	reviews, err := h.pullSvc.GetReviews(c.Context(), uint(prID))
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	return c.JSON(fiber.Map{"reviews": reviews})
+}
+
+func (h *PullRequestHandler) ResolveThread(c *fiber.Ctx) error {
+	userID := middleware.UserIDFromContext(c)
+	if userID == 0 {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "Unauthorized"})
+	}
+
+	threadIDStr := c.Params("thread_id")
+	threadID, err := strconv.ParseUint(threadIDStr, 10, 32)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid Thread ID"})
+	}
+
+	if err := h.pullSvc.ResolveThread(c.Context(), uint(threadID), userID); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	return c.JSON(fiber.Map{"message": "Thread resolved"})
+}
+
+type MergePRRequest struct {
+	HeadCommitSHA string `json:"head_commit_sha"`
+}
+
 func (h *PullRequestHandler) MergePullRequest(c *fiber.Ctx) error {
 	repo, err := h.getAuthorizedRepo(c)
 	if err != nil {
@@ -146,11 +216,14 @@ func (h *PullRequestHandler) MergePullRequest(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid PR ID"})
 	}
 
+	var req MergePRRequest
+	_ = c.BodyParser(&req)
+
 	username, _ := c.Locals("username").(string)
 
-	commitHash, err := h.pullSvc.MergePullRequest(c.Context(), uint(prID), repo.Name, username, username+"@gitlink.local")
+	commitHash, err := h.pullSvc.MergePullRequest(c.Context(), uint(prID), repo.Name, username, username+"@gitlink.local", req.HeadCommitSHA)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
 	}
 
 	return c.JSON(fiber.Map{"status": "merged", "mergeCommitHash": commitHash})
