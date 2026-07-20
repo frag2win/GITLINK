@@ -76,3 +76,21 @@ func (h *TeamHandler) AddMember(c *fiber.Ctx) error {
 	}
 	return c.JSON(fiber.Map{"message": "Member added to team"})
 }
+
+type SetRepoPermissionRequest struct {
+	RepositoryID uint   `json:"repository_id"`
+	Role         string `json:"role"` // "admin", "write", "read"
+}
+
+func (h *TeamHandler) SetRepoPermission(c *fiber.Ctx) error {
+	teamID, _ := strconv.ParseUint(c.Params("id"), 10, 64)
+	var req SetRepoPermissionRequest
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid request payload"})
+	}
+
+	if err := h.teamService.SetRepoPermission(c.UserContext(), uint(teamID), req.RepositoryID, req.Role); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+	}
+	return c.JSON(fiber.Map{"message": "Team repository permission updated"})
+}

@@ -103,7 +103,7 @@ func main() {
 	repoSvc := service.NewRepoService(repoRepo, gitSvc, auditSvc, txManager)
 	healthSvc := service.NewHealthService(healthRepo)
 	branchProtectSvc := service.NewBranchProtectionService(branchProtectionRepo)
-	authzSvc := service.NewAuthorizationService(repoRepo, contributorRepo, branchProtectionRepo)
+	authzSvc := service.NewAuthorizationService(repoRepo, contributorRepo, branchProtectionRepo, teamRepo)
 	prRepo := repository.NewPullRequestRepository(db.Conn)
 	pullSvc := service.NewPullRequestService(prRepo, prReviewRepo, gitSvc, eventBus)
 	teamSvc := service.NewTeamService(teamRepo)
@@ -126,7 +126,7 @@ func main() {
 		File:         handlers.NewFileHandler(gitSvc, repoSvc),
 		Contributor:  handlers.NewContributorHandler(repoSvc, contributorRepo, userRepo),
 		Health:       handlers.NewHealthHandler(healthSvc),
-		GitHTTP:      handlers.NewGitHTTPHandler(gitSvc),
+		GitHTTP:      handlers.NewGitHTTPHandler(gitSvc, authzSvc),
 		Sync:         handlers.NewSyncHandler(syncSvc, peerSvc, syncRepo),
 		Team:         handlers.NewTeamHandler(teamSvc),
 		Notification: handlers.NewNotificationHandler(notifSvc),

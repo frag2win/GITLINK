@@ -4,35 +4,51 @@ import (
 	"fmt"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/localrepo/api-server/internal/middleware"
 	"github.com/localrepo/api-server/internal/service"
 )
 
 type GitHTTPHandler struct {
 	gitService service.GitService
+	authzSvc   service.AuthorizationService
 }
 
-func NewGitHTTPHandler(gitService service.GitService) *GitHTTPHandler {
-	return &GitHTTPHandler{gitService: gitService}
+func NewGitHTTPHandler(gitService service.GitService, authzSvc service.AuthorizationService) *GitHTTPHandler {
+	return &GitHTTPHandler{
+		gitService: gitService,
+		authzSvc:   authzSvc,
+	}
 }
 
 // InfoRefs handles: GET /:repo/info/refs?service=git-upload-pack
 func (h *GitHTTPHandler) InfoRefs(c *fiber.Ctx) error {
 	repo := c.Params("repo")
-	service := c.Query("service")
+	svcName := c.Query("service")
 
-	if service != "git-upload-pack" && service != "git-receive-pack" {
+	if svcName != "git-upload-pack" && svcName != "git-receive-pack" {
 		return c.Status(fiber.StatusBadRequest).SendString("invalid service")
 	}
 
-	c.Set("Content-Type", "application/x-"+service+"-advertisement")
+	userID := middleware.UserIDFromContext(c)
+	if svcName == "git-receive-pack" {
+		if userID == 0 {
+			return c.Status(fiber.StatusUnauthorized).SendString("Authentication required")
+		}
+		res, err := h.authzSvc.AuthorizePush(c.UserContext(), userID, repo, "main")
+		if err != nil || !res.Allowed {
+			return c.Status(fiber.StatusForbidden).SendString("Push access denied")
+		}
+	}
+
+	c.Set("Content-Type", "application/x-"+svcName+"-advertisement")
 	c.Set("Cache-Control", "no-cache")
 
-	respBytes, err := h.gitService.InfoRefs(c.Context(), repo, service)
+	respBytes, err := h.gitService.InfoRefs(c.Context(), repo, svcName)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).SendString(err.Error())
 	}
 
-	header := pktLine("# service=" + service + "\n")
+	header := pktLine("# service=" + svcName + "\n")
 	flush := "0000"
 
 	c.Write([]byte(header))
@@ -59,6 +75,16 @@ func (h *GitHTTPHandler) UploadPack(c *fiber.Ctx) error {
 // ReceivePack handles: POST /:repo/git-receive-pack
 func (h *GitHTTPHandler) ReceivePack(c *fiber.Ctx) error {
 	repo := c.Params("repo")
+
+	userID := middleware.UserIDFromContext(c)
+	if userID == 0 {
+		return c.Status(fiber.StatusUnauthorized).SendString("Authentication required")
+	}
+
+	res, err := h.authzSvc.AuthorizePush(c.UserContext(), userID, repo, "main")
+	if err != nil || !res.Allowed {
+		return c.Status(fiber.StatusForbidden).SendString("Push access denied")
+	}
 
 	c.Set("Content-Type", "application/x-git-receive-pack-result")
 	c.Set("Cache-Control", "no-cache")

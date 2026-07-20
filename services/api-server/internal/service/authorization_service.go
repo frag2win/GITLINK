@@ -25,17 +25,20 @@ type authorizationService struct {
 	repoRepo         repository.RepoRepository
 	contributorRepo  repository.ContributorRepository
 	branchProtection repository.BranchProtectionRepository
+	teamRepo         repository.TeamRepository
 }
 
 func NewAuthorizationService(
 	repoRepo repository.RepoRepository,
 	contributorRepo repository.ContributorRepository,
 	branchProtection repository.BranchProtectionRepository,
+	teamRepo repository.TeamRepository,
 ) AuthorizationService {
 	return &authorizationService{
 		repoRepo:         repoRepo,
 		contributorRepo:  contributorRepo,
 		branchProtection: branchProtection,
+		teamRepo:         teamRepo,
 	}
 }
 
@@ -61,18 +64,24 @@ func (s *authorizationService) AuthorizePush(ctx context.Context, userID uint, r
 		return nil, fmt.Errorf("authz: fetch repo: %w", err)
 	}
 
-	// 2. Resolve User Role
+	// 2. Resolve User Role (Direct Collaborator OR Team Permission)
 	role := "none"
 	if repo.OwnerID == userID {
 		role = "owner"
 	} else {
 		dbRole, err := s.contributorRepo.FindRole(ctx, repo.ID, userID)
-		if err != nil {
-			if !errors.Is(err, gorm.ErrRecordNotFound) {
-				return nil, fmt.Errorf("authz: fetch collaborator: %w", err)
-			}
-		} else {
+		if err == nil {
 			role = dbRole
+		} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, fmt.Errorf("authz: fetch collaborator: %w", err)
+		}
+
+		// Fallback to Team RBAC if direct collaborator role is not sufficient
+		if role == "none" && s.teamRepo != nil {
+			teamRole, err := s.teamRepo.GetUserRepoRole(ctx, userID, repo.ID)
+			if err == nil && teamRole != "" {
+				role = teamRole
+			}
 		}
 	}
 

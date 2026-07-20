@@ -72,6 +72,7 @@ func Setup(app *fiber.App, h *Handlers, cfg *config.Config) {
 	protected.Post("/orgs", h.Team.CreateOrganization)
 	protected.Post("/teams", h.Team.CreateTeam)
 	protected.Post("/teams/:id/members", h.Team.AddMember)
+	protected.Post("/teams/:id/permissions", h.Team.SetRepoPermission)
 
 	// Notification routes
 	protected.Get("/notifications", h.Notification.GetNotifications)
@@ -98,16 +99,17 @@ func Setup(app *fiber.App, h *Handlers, cfg *config.Config) {
 	protected.Post("/sync/retry/:id", h.Sync.RetryTask)
 	protected.Post("/sync/trigger", h.Sync.TriggerSync)
 
+	// Git Smart HTTP fallback routes (protected with auth)
+	gitHTTPGroup := app.Group("", middleware.Auth(cfg.JWTSecret))
+	gitHTTPGroup.Get("/:repo/info/refs", h.GitHTTP.InfoRefs)
+	gitHTTPGroup.Post("/:repo/git-upload-pack", h.GitHTTP.UploadPack)
+	gitHTTPGroup.Post("/:repo/git-receive-pack", h.GitHTTP.ReceivePack)
+
 	// ---- Static file serving for the web UI ----
 	app.Static("/", "./ui/dist", fiber.Static{
 		Index:    "index.html",
 		Compress: true,
 	})
-
-	// Git Smart HTTP fallback routes
-	app.Get("/:repo/info/refs", h.GitHTTP.InfoRefs)
-	app.Post("/:repo/git-upload-pack", h.GitHTTP.UploadPack)
-	app.Post("/:repo/git-receive-pack", h.GitHTTP.ReceivePack)
 
 	// SPA fallback — serve index.html for any unmatched routes
 	app.Get("/*", func(c *fiber.Ctx) error {
