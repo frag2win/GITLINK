@@ -21,6 +21,8 @@ type SyncRepository interface {
 	RecoverStaleTasks(ctx context.Context, timeoutThreshold time.Duration) (int64, error)
 	ListTasks(ctx context.Context, limit, offset int, status string) ([]models.SyncTask, int64, error)
 	GetSyncMetrics(ctx context.Context) (map[string]interface{}, error)
+	GetDLQTasks(ctx context.Context) ([]models.SyncTask, error)
+	ReplayDLQTask(ctx context.Context, id uint) error
 }
 
 type syncRepository struct {
@@ -181,4 +183,26 @@ func (r *syncRepository) GetSyncMetrics(ctx context.Context) (map[string]interfa
 		"avg_duration_ms":   avgDuration,
 		"success_rate_pct":  successRate,
 	}, nil
+}
+
+func (r *syncRepository) GetDLQTasks(ctx context.Context) ([]models.SyncTask, error) {
+	var tasks []models.SyncTask
+	err := r.db.WithContext(ctx).
+		Where("status = ?", models.SyncTaskFailed).
+		Order("id DESC").
+		Limit(100).
+		Find(&tasks).Error
+	return tasks, err
+}
+
+func (r *syncRepository) ReplayDLQTask(ctx context.Context, id uint) error {
+	return r.db.WithContext(ctx).
+		Model(&models.SyncTask{}).
+		Where("id = ?", id).
+		Updates(map[string]interface{}{
+			"status":        models.SyncTaskPending,
+			"attempt_count": 0,
+			"last_error":    "Manually replayed from DLQ",
+			"next_retry_at": nil,
+		}).Error
 }

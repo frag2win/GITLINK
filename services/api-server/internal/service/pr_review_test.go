@@ -71,7 +71,7 @@ func (m *mockGitService) GetCommit(ctx context.Context, repo, hash string) (*pb.
 	return nil, nil
 }
 func (m *mockGitService) GetDiff(ctx context.Context, repo, base, target string) (string, error) {
-	return "", nil
+	return "diff --git a/src/main.go b/src/main.go\n--- a/src/main.go\n+++ b/src/main.go\n@@ -10,5 +10,5 @@", nil
 }
 func (m *mockGitService) GetTree(ctx context.Context, repo, ref, path string) ([]*pb.TreeEntry, error) {
 	return []*pb.TreeEntry{}, nil

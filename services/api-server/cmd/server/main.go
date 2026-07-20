@@ -108,6 +108,8 @@ func main() {
 	pullSvc := service.NewPullRequestService(prRepo, prReviewRepo, gitSvc, eventBus)
 	teamSvc := service.NewTeamService(teamRepo)
 	notifSvc := service.NewNotificationService(notifRepo, eventBus)
+	wsHub := service.NewWebSocketHub(eventBus)
+	conflictSvc := service.NewConflictService(gitSvc)
 
 	peerSvc := service.NewPeerService(p2pClient)
 	syncSvc := service.NewSyncService(syncRepo, peerSvc, logger)
@@ -125,11 +127,15 @@ func main() {
 		Commit:       handlers.NewCommitHandler(gitSvc, repoSvc),
 		File:         handlers.NewFileHandler(gitSvc, repoSvc),
 		Contributor:  handlers.NewContributorHandler(repoSvc, contributorRepo, userRepo),
-		Health:       handlers.NewHealthHandler(healthSvc),
+		Health:       handlers.NewHealthHandler(healthSvc, syncRepo),
 		GitHTTP:      handlers.NewGitHTTPHandler(gitSvc, authzSvc),
 		Sync:         handlers.NewSyncHandler(syncSvc, peerSvc, syncRepo),
 		Team:         handlers.NewTeamHandler(teamSvc),
 		Notification: handlers.NewNotificationHandler(notifSvc),
+		Metrics:      handlers.NewMetricsHandler(syncRepo),
+		WS:           handlers.NewWSHandler(wsHub, notifSvc),
+		Admin:        handlers.NewAdminHandler(syncRepo, peerSvc, auditSvc),
+		Conflict:     handlers.NewConflictHandler(conflictSvc, repoSvc),
 	}
 
 	// 8. Start IPC Server for Git Hooks

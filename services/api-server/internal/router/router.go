@@ -23,16 +23,23 @@ type Handlers struct {
 	Sync         *handlers.SyncHandler
 	Team         *handlers.TeamHandler
 	Notification *handlers.NotificationHandler
+	Metrics      *handlers.MetricsHandler
+	WS           *handlers.WSHandler
+	Admin        *handlers.AdminHandler
+	Conflict     *handlers.ConflictHandler
 }
 
 // Setup registers all API route groups and static file serving on the given Fiber app.
 func Setup(app *fiber.App, h *Handlers, cfg *config.Config) {
 	api := app.Group("/api/v1")
 
-	// Health endpoints
-	app.Get("/health", h.Health.CheckHealth)
-	app.Get("/ready", h.Health.CheckHealth)
-	app.Get("/live", h.Health.CheckHealth)
+	// Tiered Health endpoints
+	app.Get("/health", h.Health.Liveness)
+	app.Get("/ready", h.Health.Readiness)
+	api.Get("/health/deep", h.Health.DeepDiagnostics)
+
+	// Categorized Metrics endpoint
+	api.Get("/metrics", h.Metrics.GetMetrics)
 
 	// Auth routes (public)
 	api.Post("/auth/register", h.Auth.Register)
@@ -40,6 +47,11 @@ func Setup(app *fiber.App, h *Handlers, cfg *config.Config) {
 
 	// Protected routes — require valid JWT
 	protected := api.Group("", middleware.Auth(cfg.JWTSecret))
+
+	// Real-Time Notification Stream (WebSockets / EventSource)
+	if h.WS != nil {
+		protected.Get("/ws/notifications", h.WS.StreamNotifications)
+	}
 
 	// Authenticated User info & keys
 	protected.Get("/auth/me", h.Auth.GetMe)
@@ -52,6 +64,7 @@ func Setup(app *fiber.App, h *Handlers, cfg *config.Config) {
 	protected.Get("/repos/:id", h.Repo.GetRepo)
 	protected.Post("/repos", h.Repo.CreateRepo)
 	protected.Delete("/repos/:id", h.Repo.DeleteRepo)
+	protected.Get("/repos/:id/conflicts/analyze", h.Conflict.AnalyzeConflicts)
 
 	// Branch routes
 	protected.Get("/repos/:id/branches", h.Branch.ListBranches)
@@ -92,12 +105,19 @@ func Setup(app *fiber.App, h *Handlers, cfg *config.Config) {
 	protected.Get("/repos/:id/files/*", h.File.BrowseFiles)
 	protected.Get("/repos/:id/blob/*", h.File.GetFileContent)
 
-	// Synchronization Dashboard routes
+	// Synchronization Dashboard & DLQ Admin routes
 	protected.Get("/sync/peers", h.Sync.GetPeers)
 	protected.Get("/sync/queue", h.Sync.GetQueue)
 	protected.Get("/sync/metrics", h.Sync.GetMetrics)
 	protected.Post("/sync/retry/:id", h.Sync.RetryTask)
 	protected.Post("/sync/trigger", h.Sync.TriggerSync)
+
+	// DLQ & Operations Admin API
+	protected.Get("/sync/dlq", h.Admin.GetDLQ)
+	protected.Post("/sync/dlq/:id/replay", h.Admin.ReplayDLQTask)
+	protected.Get("/admin/workers", h.Admin.GetWorkers)
+	protected.Get("/admin/peers", h.Admin.GetPeers)
+	protected.Post("/admin/sync/restart", h.Admin.RestartSyncWorker)
 
 	// Git Smart HTTP fallback routes (protected with auth)
 	gitHTTPGroup := app.Group("", middleware.Auth(cfg.JWTSecret))
