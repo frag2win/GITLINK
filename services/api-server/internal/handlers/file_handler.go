@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"encoding/base64"
 	"errors"
 	"path/filepath"
 	"strconv"
@@ -142,11 +143,22 @@ func (h *FileHandler) serveFile(c *fiber.Ctx, repoName, ref, path string) error 
 	// Determine MIME type
 	name := filepath.Base(path)
 	mimeType := "text/plain"
-	if strings.HasSuffix(name, ".png") || strings.HasSuffix(name, ".jpg") {
+	switch {
+	case strings.HasSuffix(name, ".png"):
 		mimeType = "image/png"
-	} // Simple check; expand as needed
+	case strings.HasSuffix(name, ".jpg"), strings.HasSuffix(name, ".jpeg"):
+		mimeType = "image/jpeg"
+	case strings.HasSuffix(name, ".gif"):
+		mimeType = "image/gif"
+	case strings.HasSuffix(name, ".svg"):
+		mimeType = "image/svg+xml"
+	case strings.HasSuffix(name, ".pdf"):
+		mimeType = "application/pdf"
+	case strings.HasSuffix(name, ".json"):
+		mimeType = "application/json"
+	}
 
-	// Determine if binary (basic check)
+	// Determine if binary (null byte heuristic)
 	isBinary := false
 	for _, b := range content {
 		if b == 0 {
@@ -155,12 +167,10 @@ func (h *FileHandler) serveFile(c *fiber.Ctx, repoName, ref, path string) error 
 		}
 	}
 
-	// For binary content, we might base64 encode it. For text, plain string.
-	// (Prost payload returns raw bytes; we serialize as string for JSON DTO)
+	// Binary content is base64-encoded to produce valid JSON UTF-8.
 	var contentStr string
 	if isBinary {
-		// We could base64 encode, but plain text is fine if we convert to string or handle appropriately.
-		contentStr = string(content) // Simplification; base64 can be done if needed by client.
+		contentStr = base64.StdEncoding.EncodeToString(content)
 	} else {
 		contentStr = string(content)
 	}

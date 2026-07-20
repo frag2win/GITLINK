@@ -51,7 +51,15 @@ func Auth(jwtSecret []byte) fiber.Handler {
 			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "Invalid token claims"})
 		}
 
-		userID := uint(claims["sub"].(float64))
+		subVal, subOK := claims["sub"]
+		if !subOK {
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "Invalid token claims: missing sub"})
+		}
+		subFloat, subOK := subVal.(float64)
+		if !subOK {
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "Invalid token claims: bad sub type"})
+		}
+		userID := uint(subFloat)
 		c.Locals("userID", userID)
 		c.Locals("username", claims["username"])
 

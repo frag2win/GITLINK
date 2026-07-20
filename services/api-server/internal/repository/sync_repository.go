@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/localrepo/api-server/internal/models"
@@ -171,13 +172,24 @@ func (r *syncRepository) GetSyncMetrics(ctx context.Context) (map[string]interfa
 	var avgDuration float64
 
 	db := r.db.WithContext(ctx)
-	db.Model(&models.SyncTask{}).Count(&totalTasks)
-	db.Model(&models.SyncTask{}).Where("status = ?", models.SyncTaskCompleted).Count(&completedTasks)
-	db.Model(&models.SyncTask{}).Where("status = ?", models.SyncTaskFailed).Count(&failedTasks)
-	db.Model(&models.SyncTask{}).Where("status IN (?, ?, ?)", models.SyncTaskPending, models.SyncTaskRunning, models.SyncTaskRetryScheduled).Count(&pendingTasks)
-
-	db.Model(&models.SyncTask{}).Where("status = ?", models.SyncTaskCompleted).Select("COALESCE(SUM(bytes_transferred), 0)").Scan(&totalBytes)
-	db.Model(&models.SyncTask{}).Where("status = ?", models.SyncTaskCompleted).Select("COALESCE(AVG(duration_ms), 0)").Scan(&avgDuration)
+	if err := db.Model(&models.SyncTask{}).Count(&totalTasks).Error; err != nil {
+		return nil, fmt.Errorf("sync metrics: count total: %w", err)
+	}
+	if err := db.Model(&models.SyncTask{}).Where("status = ?", models.SyncTaskCompleted).Count(&completedTasks).Error; err != nil {
+		return nil, fmt.Errorf("sync metrics: count completed: %w", err)
+	}
+	if err := db.Model(&models.SyncTask{}).Where("status = ?", models.SyncTaskFailed).Count(&failedTasks).Error; err != nil {
+		return nil, fmt.Errorf("sync metrics: count failed: %w", err)
+	}
+	if err := db.Model(&models.SyncTask{}).Where("status IN (?, ?, ?)", models.SyncTaskPending, models.SyncTaskRunning, models.SyncTaskRetryScheduled).Count(&pendingTasks).Error; err != nil {
+		return nil, fmt.Errorf("sync metrics: count pending: %w", err)
+	}
+	if err := db.Model(&models.SyncTask{}).Where("status = ?", models.SyncTaskCompleted).Select("COALESCE(SUM(bytes_transferred), 0)").Scan(&totalBytes).Error; err != nil {
+		return nil, fmt.Errorf("sync metrics: sum bytes: %w", err)
+	}
+	if err := db.Model(&models.SyncTask{}).Where("status = ?", models.SyncTaskCompleted).Select("COALESCE(AVG(duration_ms), 0)").Scan(&avgDuration).Error; err != nil {
+		return nil, fmt.Errorf("sync metrics: avg duration: %w", err)
+	}
 
 	var successRate float64
 	if totalTasks > 0 {
@@ -185,13 +197,13 @@ func (r *syncRepository) GetSyncMetrics(ctx context.Context) (map[string]interfa
 	}
 
 	return map[string]interface{}{
-		"total_tasks":       totalTasks,
-		"completed_tasks":   completedTasks,
-		"failed_tasks":      failedTasks,
-		"pending_tasks":     pendingTasks,
-		"total_bytes":       totalBytes,
-		"avg_duration_ms":   avgDuration,
-		"success_rate_pct":  successRate,
+		"total_tasks":      totalTasks,
+		"completed_tasks":  completedTasks,
+		"failed_tasks":     failedTasks,
+		"pending_tasks":    pendingTasks,
+		"total_bytes":      totalBytes,
+		"avg_duration_ms":  avgDuration,
+		"success_rate_pct": successRate,
 	}, nil
 }
 

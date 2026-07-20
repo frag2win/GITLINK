@@ -29,7 +29,8 @@ type syncService struct {
 	stopChan     chan struct{}
 	wg           sync.WaitGroup
 	logger       *slog.Logger
-	mu           sync.Mutex
+	mu           sync.Mutex  // guards isStopped + channel state
+	restartMu    sync.Mutex  // serializes Stop→Reset→Start lifecycle
 	isStopped    bool
 }
 
@@ -212,10 +213,14 @@ func (s *syncService) handleFailure(ctx context.Context, task *models.SyncTask, 
 }
 
 func (s *syncService) RestartWorker(ctx context.Context) {
+	// Serialize concurrent restart requests. Without this, two goroutines
+	// can race: goroutine A blocks in wg.Wait() while goroutine B has already
+	// called muReset()+StartWorker() → wg.Add(2), violating the WaitGroup contract.
+	s.restartMu.Lock()
+	defer s.restartMu.Unlock()
+
 	s.logger.Info("Graceful worker restart initiated: pausing and draining sync worker")
 	s.StopWorker()
-
-	// Reset channels and waitgroup to initial state
 	s.muReset()
 	s.StartWorker(ctx)
 	s.logger.Info("Sync worker successfully restarted and resumed processing")

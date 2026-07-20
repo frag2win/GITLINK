@@ -41,6 +41,11 @@ func (h *WSHandler) HandleConnection(c *websocket.Conn) {
 
 	sendCh := make(chan service.WSMessage, 64)
 	h.hub.Register(userID, sendCh)
+
+	// writerCtx is cancelled when the reader exits (client disconnect or error).
+	// This stops the writer goroutine before hub.Unregister closes sendCh.
+	writerCtx, cancelWriter := context.WithCancel(context.Background())
+	defer cancelWriter()
 	defer h.hub.Unregister(userID, sendCh)
 
 	// Replay missed notifications if last_event_id is provided in query parameter
@@ -67,11 +72,20 @@ func (h *WSHandler) HandleConnection(c *websocket.Conn) {
 		}
 	}
 
-	// Writer loop (keep connections open and stream)
+	// Writer loop: stops when writerCtx is cancelled or sendCh is closed.
 	go func() {
-		for msg := range sendCh {
-			if err := c.WriteJSON(msg); err != nil {
-				break
+		for {
+			select {
+			case <-writerCtx.Done():
+				return
+			case msg, ok := <-sendCh:
+				if !ok {
+					return
+				}
+				if err := c.WriteJSON(msg); err != nil {
+					cancelWriter()
+					return
+				}
 			}
 		}
 	}()
@@ -82,4 +96,6 @@ func (h *WSHandler) HandleConnection(c *websocket.Conn) {
 			break
 		}
 	}
+	// cancelWriter() fires via defer, stopping the writer goroutine cleanly
+	// before the hub.Unregister defer closes sendCh.
 }

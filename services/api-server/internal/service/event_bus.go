@@ -1,6 +1,7 @@
 package service
 
 import (
+	"log/slog"
 	"sync"
 
 	"github.com/localrepo/api-server/internal/models"
@@ -36,7 +37,9 @@ func (b *eventBus) Publish(event models.DomainEvent) {
 	for _, l := range b.listeners {
 		go func(listener EventListener) {
 			defer func() {
-				_ = recover() // Prevents unhandled listener panics from crashing api-server
+				if r := recover(); r != nil {
+					slog.Error("eventbus: listener panic recovered", "error", r)
+				}
 			}()
 			listener(event)
 		}(l)

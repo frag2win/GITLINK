@@ -108,6 +108,10 @@ func (h *ContributorHandler) ListContributors(c *fiber.Ctx) error {
 	}
 
 	for _, col := range collaborators {
+		// Skip owner — already included above as admin
+		if col.UserID == repo.OwnerID {
+			continue
+		}
 		user, err := h.userRepo.FindByID(col.UserID)
 		if err != nil {
 			continue
