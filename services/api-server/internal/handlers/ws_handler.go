@@ -43,7 +43,9 @@ func (h *WSHandler) HandleConnection(c *websocket.Conn) {
 	h.hub.Register(userID, sendCh)
 
 	// writerCtx is cancelled when the reader exits (client disconnect or error).
-	// This stops the writer goroutine before hub.Unregister closes sendCh.
+	// Go defers are LIFO: cancelWriter() fires first (stopping the writer goroutine),
+	// then hub.Unregister() fires (closing sendCh). This ordering prevents the writer
+	// from writing to a closed channel.
 	writerCtx, cancelWriter := context.WithCancel(context.Background())
 	defer cancelWriter()
 	defer h.hub.Unregister(userID, sendCh)

@@ -12,8 +12,8 @@ mod tests {
     fn make_config(repos_path: &str) -> Config {
         Config {
             repos_path: repos_path.to_string(),
-            socket_path: "/tmp/test.sock".to_string(),
-            http_port: 0,
+            ipc_network: "unix".to_string(),
+            ipc_address: "/tmp/test.sock".to_string(),
             log_level: "error".to_string(),
         }
     }
